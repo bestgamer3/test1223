@@ -95,11 +95,11 @@ jobs:
         shell: pwsh
         run: |
           $asi = Get-ChildItem "build-plugin" -Recurse -File -Filter "MW3VR.asi" | Select-Object -First 1
-          $host = Get-ChildItem "build-host" -Recurse -File -Filter "MW3VRHost.exe" | Select-Object -First 1
+          $hostExe = Get-ChildItem "build-host" -Recurse -File -Filter "MW3VRHost.exe" | Select-Object -First 1
           if (-not $asi) { throw "MW3VR.asi not found" }
-          if (-not $host) { throw "MW3VRHost.exe not found" }
+          if (-not $hostExe) { throw "MW3VRHost.exe not found" }
           Write-Host "ASI: $($asi.FullName)"
-          Write-Host "Host: $($host.FullName)"
+          Write-Host "Host: $($hostExe.FullName)"
 
       - name: Fetch Ultimate ASI Loader Win32 D3D9
         shell: pwsh
@@ -113,12 +113,12 @@ jobs:
         shell: pwsh
         run: |
           $asi = Get-ChildItem "build-plugin" -Recurse -File -Filter "MW3VR.asi" | Select-Object -First 1
-          $host = Get-ChildItem "build-host" -Recurse -File -Filter "MW3VRHost.exe" | Select-Object -First 1
+          $hostExe = Get-ChildItem "build-host" -Recurse -File -Filter "MW3VRHost.exe" | Select-Object -First 1
           $loader = Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1
-          if (-not $asi -or -not $host -or -not $loader) { throw "One or more package binaries missing" }
+          if (-not $asi -or -not $hostExe -or -not $loader) { throw "One or more package binaries missing" }
           New-Item -ItemType Directory -Force "artifact\plugins" | Out-Null
           Copy-Item $loader.FullName "artifact\d3d9.dll"
-          Copy-Item $host.FullName "artifact\MW3VRHost.exe"
+          Copy-Item $hostExe.FullName "artifact\MW3VRHost.exe"
           Copy-Item $asi.FullName "artifact\plugins\MW3VR.asi"
           Copy-Item "MW3VR_alpha02_outproc\mw3vr.ini" "artifact\plugins\mw3vr.ini"
           Copy-Item "MW3VR_alpha02_outproc\THIRD_PARTY_NOTICES.md" "artifact\THIRD_PARTY_NOTICES.md"
