@@ -23,6 +23,15 @@ jobs:
           [IO.File]::WriteAllBytes("mw3vr_source.zip", [Convert]::FromBase64String($b64))
           Expand-Archive -Path "mw3vr_source.zip" -DestinationPath "." -Force
 
+      - name: Apply MSVC proxy include fix
+        shell: pwsh
+        run: |
+          $path = "MW3VR_OpenXR\src\system_d3d9.cpp"
+          $text = Get-Content $path -Raw
+          $text = $text.Replace("#include `"openxr_runtime.h`"`r`n", "")
+          $text = $text.Replace("#include `"openxr_runtime.h`"`n", "")
+          Set-Content -Path $path -Value $text -NoNewline
+
       - name: Configure Win32 Release
         shell: cmd
         run: cmake -S MW3VR_OpenXR -B build-mw3vr -A Win32
