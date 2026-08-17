@@ -1,0 +1,49 @@
+::vector<fs::path> clients;
+     const fs::path support = FindOculusSupportRootFromManifest(manifest);
+     if (!support.empty()) clients.emplace_back(support / L"oculus-client" / L"OculusClient.exe");
+@@ -360,13 +425,24 @@
+         clients.emplace_back(fs::path(programFiles) / L"Meta Quest Link" / L"Support" / L"oculus-client" / L"OculusClient.exe");
+     }
+ 
+-    fs::path client;
+     for (const auto& c : clients) {
+         std::error_code ec;
+-        if (fs::exists(c, ec)) { client = c; break; }
++        if (fs::exists(c, ec)) return c;
+     }
++    return {};
++}
++
++void StartOculusClientIfNeeded(const std::wstring& manifest)
++{
++    if (!GetPrivateProfileIntW(L"VR", L"AutoStartOculusPC", 1, g_iniPath)) return;
++    if (ProcessRunning(L"OculusClient.exe")) {
++        HostLog("Oculus PC: OculusClient.exe is already running.");
++        return;
++    }
++
++    const fs::path client = FindOculusClient(manifest);
+     if (client.empty()) {
+-        HostLog("Meta Quest Link: OculusClient.exe was not found. Start the Meta Quest Link desktop app manually and connect Link/Air Link.");
++        HostLog("Oculus PC: OculusClient.exe was not found. Start the Oculus/Meta PC app manually.");
+         return;
+     }
+ 
+@@ -378,13 +454,34 @@
+     PROCESS_INFORMATION pi{};
+     if (CreateProcessW(client.c_str(), mutableCmd.data(), nullptr, nullptr, FALSE, 0,
+             nullptr, client.parent_path().c_str(), &si, &pi)) {
+-        HostLog("Meta Quest Link: started %ls pid=%lu", client.c_str(), pi.dwProcessId);
++        HostLog("Oculus PC: started %ls pid=%lu", client.c_str(), pi.dwProcessId);
+         CloseHandle(pi.hThread);
+         CloseHandle(pi.hProcess);
+-        Sleep(1500);
+     } else {
+-        HostLog("Meta Quest Link: CreateProcess(OculusClient.exe) failed err=%lu", GetLastError());
++        HostLog("Oculus PC: CreateProcess(OculusClient.exe) failed err=%lu", GetLastError());
++    }
++}
++
++bool PrepareOculusPcRuntimeForCv1(const std::wstring& manifest)
++{
++    const DWOR
