@@ -44,8 +44,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifact | Out-Null
-          Copy-Item "build-mw3vr\bin\Release\d3d9.dll" "artifact\d3d9.dll"
-          Copy-Item "build-mw3vr\bin\Release\mw3vr.ini" "artifact\mw3vr.ini"
+          Copy-Item "build-mw3vr\Release\d3d9.dll" "artifact\d3d9.dll"
+          Copy-Item "build-mw3vr\Release\mw3vr.ini" "artifact\mw3vr.ini"
           Copy-Item "MW3VR_OpenXR\README.md" "artifact\README.md"
           Copy-Item "MW3VR_OpenXR\THIRD_PARTY_NOTICES.md" "artifact\THIRD_PARTY_NOTICES.md"
           Get-FileHash "artifact\d3d9.dll" -Algorithm SHA256 | Format-List | Out-File "artifact\SHA256.txt"
