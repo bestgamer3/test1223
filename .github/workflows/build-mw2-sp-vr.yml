@@ -1,4 +1,4 @@
-name: Build MW2 Campaign VR Phase 3A
+name: Build MW2 Campaign VR Phase 3A Yaw Fix
 
 on:
   workflow_dispatch:
@@ -42,13 +42,17 @@ jobs:
           Copy-Item $loader.FullName artifact\openxr_loader.dll
           Copy-Item source\sp_vr\README.md artifact\README.md
           @"
-          MW2 Campaign VR Phase 3A - Rift CV1 Touch Controls
+          MW2 Campaign VR Phase 3A - Rift CV1 Touch Controls - Yaw Fix
           Targets Call of Duty: Modern Warfare 2 (2009) single-player: iw4sp.exe
 
           Put MW2CampaignVR.exe and openxr_loader.dll beside iw4sp.exe.
           Start Steam and your OpenXR headset runtime, then run MW2CampaignVR.exe.
 
-          Phase 2B optical-center eye correction is preserved.
+          FIX IN THIS BUILD:
+          - Corrects OpenXR -> IW4 yaw handedness.
+          - Turning your head right now sends MW2 camera-right, not camera-left.
+          - The same correction is applied to right-hand Touch aiming.
+          - Pitch direction and the Phase 2B optical-center eye renderer are unchanged.
 
           Rift Touch controls:
           - Right controller motion: aim adjustment relative to HMD
@@ -58,21 +62,15 @@ jobs:
           - X: reload
           - A: jump
 
-          Keyboard fallback:
           F8  = recenter headset/controller reference
           F9  = toggle head-look
           F10 = toggle 6DoF translation
           F12 = close VR companion
-
-          Both aim and grip poses are tracked for both Touch controllers.
-          Phase 3A still uses IW4's camera-coupled first-person weapon. The next
-          Phase 3B stage hooks the IW4 viewmodel/weapon transform so the visible
-          weapon itself can follow the tracked hand like a native VR weapon.
           "@ | Set-Content artifact\QUICKSTART.txt
 
       - name: Upload MW2 Campaign VR build
         uses: actions/upload-artifact@v4
         with:
-          name: MW2-Campaign-VR-Phase3A-TouchControllers-Win64
+          name: MW2-Campaign-VR-Phase3A-YawFix-Win64
           path: artifact
           if-no-files-found: error
