@@ -31,9 +31,7 @@ jobs:
           $b64 = ($paths | ForEach-Object { (Get-Content $_ -Raw).Trim() }) -join ""
           [IO.File]::WriteAllBytes("mw3vr_asi_source.zip", [Convert]::FromBase64String($b64))
           $hash = (Get-FileHash "mw3vr_asi_source.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne "4385670a56ef20de84c632fe37f2d956414b3e2a1faa592cc81d6e19e2cb688e") {
-            throw "Source ZIP hash mismatch: $hash"
-          }
+          if ($hash -ne "4385670a56ef20de84c632fe37f2d956414b3e2a1faa592cc81d6e19e2cb688e") { throw "Source ZIP hash mismatch: $hash" }
           Expand-Archive "mw3vr_asi_source.zip" "." -Force
 
       - name: Apply Alpha 0.1c crash-safety patch
@@ -43,14 +41,12 @@ jobs:
           $patch = $patch.Replace("`r`n", "`n")
           Set-Content "mw3vr_alpha01c.patch" -Value $patch -NoNewline
           $hash = (Get-FileHash "mw3vr_alpha01c.patch" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne "c94f4e2e16f1a6b8c226e8e9e3a5fcd62b06a6834ac63269105e45eb1dfa2395") {
-            throw "Alpha 0.1c patch hash mismatch: $hash"
-          }
+          if ($hash -ne "c94f4e2e16f1a6b8c226e8e9e3a5fcd62b06a6834ac63269105e45eb1dfa2395") { throw "Alpha 0.1c patch hash mismatch: $hash" }
           Push-Location MW3VR_ASI
           git apply "..\mw3vr_alpha01c.patch"
           Pop-Location
-          if (-not (Select-String "MW3VR_ASI\src\asi_entry.cpp" "alpha 0.1c" -Quiet)) { throw "0.1c version marker missing." }
-          if (-not (Select-String "MW3VR_ASI\mw3vr.ini" "NativeHeadTracking=0" -Quiet)) { throw "Safe native-head default missing." }
+          if (-not (Select-String -Path "MW3VR_ASI\src\asi_entry.cpp" -Pattern "alpha 0.1c" -Quiet)) { throw "0.1c version marker missing." }
+          if (-not (Select-String -Path "MW3VR_ASI\mw3vr.ini" -Pattern "NativeHeadTracking=0" -Quiet)) { throw "Safe native-head default missing." }
 
       - name: Force MW3VR target to dynamic MSVC CRT
         shell: pwsh
@@ -64,9 +60,7 @@ jobs:
             $text = $text.Replace($needle, $force + "`r`n`r`n" + $needle)
             Set-Content $path -Value $text -NoNewline
           }
-          if (-not (Select-String $path 'set_property\(TARGET mw3vr PROPERTY MSVC_RUNTIME_LIBRARY' -Quiet)) {
-            throw "Target CRT override was not installed."
-          }
+          if (-not (Select-String -Path $path -Pattern 'set_property\(TARGET mw3vr PROPERTY MSVC_RUNTIME_LIBRARY' -Quiet)) { throw "Target CRT override was not installed." }
 
       - name: Clone Khronos OpenXR SDK 1.1.61
         shell: cmd
@@ -80,9 +74,7 @@ jobs:
         shell: pwsh
         run: |
           $proj = Get-Content "build-mw3vr-asi\mw3vr.vcxproj" -Raw
-          if ($proj -notmatch '<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>') {
-            throw "MW3VR Release project is not using /MD."
-          }
+          if ($proj -notmatch '<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>') { throw "MW3VR Release project is not using /MD." }
           Write-Host "Verified MW3VR Release runtime: /MD"
 
       - name: Build MW3VR ASI
@@ -94,9 +86,7 @@ jobs:
         run: |
           Invoke-WebRequest "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/Win32-latest/d3d9-Win32.zip" -OutFile "d3d9-Win32.zip"
           Expand-Archive "d3d9-Win32.zip" "ual" -Force
-          if (-not (Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1)) {
-            throw "Ultimate ASI Loader d3d9.dll not found."
-          }
+          if (-not (Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1)) { throw "Ultimate ASI Loader d3d9.dll not found." }
 
       - name: Package build
         shell: pwsh
