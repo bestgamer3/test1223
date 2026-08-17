@@ -1,4 +1,4 @@
-name: Build MW2 Campaign VR Phase 3A Horizontal Fix
+name: Build MW2 Campaign VR Phase 3B Viewmodel Core
 
 on:
   workflow_dispatch:
@@ -22,38 +22,73 @@ jobs:
         shell: cmd
         run: git clone --depth 1 --branch mw2-vr-build https://github.com/bestgamer3/bestgamer3.git source
 
-      - name: Configure MW2 Campaign VR
+      - name: Configure x64 MW2 Campaign VR companion
         shell: cmd
-        run: cmake -S source\sp_vr -B build -A x64
+        run: cmake -S source\sp_vr -B build64 -A x64
 
-      - name: Build MW2 Campaign VR
+      - name: Build x64 MW2 Campaign VR companion
         shell: cmd
-        run: cmake --build build --config Release --target MW2CampaignVR
+        run: cmake --build build64 --config Release --target MW2CampaignVR
 
-      - name: Collect compiled files
+      - name: Configure Win32 viewmodel transform DLL
+        shell: cmd
+        run: cmake -S source\sp_vr\viewmodel_hook -B build32 -A Win32
+
+      - name: Build Win32 viewmodel transform DLL
+        shell: cmd
+        run: cmake --build build32 --config Release --target MW2VRViewmodelHook
+
+      - name: Collect compiled files and viewmodel source
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force artifact | Out-Null
-          $exe = Get-ChildItem build -Recurse -Filter MW2CampaignVR.exe | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
+          New-Item -ItemType Directory -Force artifact\ViewmodelSource | Out-Null
+
+          $exe = Get-ChildItem build64 -Recurse -Filter MW2CampaignVR.exe | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
+          if (-not $exe) { throw 'MW2CampaignVR.exe not found after x64 build' }
           $loader = Get-ChildItem $exe.Directory.FullName -Filter openxr_loader.dll | Select-Object -First 1
-          if (-not $exe) { throw 'MW2CampaignVR.exe not found after build' }
           if (-not $loader) { throw 'openxr_loader.dll not found beside MW2CampaignVR.exe' }
+
+          $hook = Get-ChildItem build32 -Recurse -Filter MW2VRViewmodelHook.dll | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
+          if (-not $hook) { throw 'MW2VRViewmodelHook.dll not found after Win32 build' }
+
           Copy-Item $exe.FullName artifact\MW2CampaignVR.exe
           Copy-Item $loader.FullName artifact\openxr_loader.dll
+          Copy-Item $hook.FullName artifact\MW2VRViewmodelHook.dll
           Copy-Item source\sp_vr\README.md artifact\README.md
+
+          Copy-Item source\sp_vr\src\VRWeaponViewmodel.hpp artifact\ViewmodelSource\VRWeaponViewmodel.hpp
+          Copy-Item source\sp_vr\src\VRWeaponViewmodel.cpp artifact\ViewmodelSource\VRWeaponViewmodel.cpp
+          Copy-Item source\sp_vr\src\VRViewmodelProtocol.hpp artifact\ViewmodelSource\VRViewmodelProtocol.hpp
+          Copy-Item source\sp_vr\src\VRViewmodelBridge.hpp artifact\ViewmodelSource\VRViewmodelBridge.hpp
+          Copy-Item source\sp_vr\src\VRViewmodelBridge.cpp artifact\ViewmodelSource\VRViewmodelBridge.cpp
+          Copy-Item source\sp_vr\viewmodel_hook\MW2VRViewmodelHook.cpp artifact\ViewmodelSource\MW2VRViewmodelHook.cpp
+
           @"
-          MW2 Campaign VR Phase 3A - CV1 Horizontal Tracking Fix
+          MW2 Campaign VR Phase 3B - Controller Weapon Viewmodel Core
           Targets Call of Duty: Modern Warfare 2 (2009) single-player: iw4sp.exe
 
-          Put MW2CampaignVR.exe and openxr_loader.dll beside iw4sp.exe.
-          Start Steam and your OpenXR headset runtime, then run MW2CampaignVR.exe.
+          WHAT IS NEW
+          - COD4-VR-style right-controller rigid weapon pose solver.
+          - Right semantic aim pose controls weapon orientation.
+          - Right grip controls weapon position.
+          - Left grip + squeeze can stabilize long guns with a smooth two-hand axis.
+          - ADS/two-hand state blends hip and shouldered weapon calibration.
+          - x64 companion publishes the completed weapon pose through a versioned cross-bitness shared-memory packet.
+          - Win32 MW2VRViewmodelHook.dll contains the in-process weapon placement transform.
+          - The confirmed Phase 2B Rift optical-center eye renderer is unchanged.
 
-          HORIZONTAL FIX:
-          - Restores direct CV1 OpenXR yaw -> MW2 mouse direction for head and controller rotation.
-          - Flips the IW4 lateral refdef axis used for physical left/right head translation.
-          - Keeps the confirmed Phase 2B optical-center eye renderer unchanged.
-          - Adds live direction toggles so either runtime convention can be tested instantly.
+          CURRENT INTEGRATION STATUS
+          MW2VRViewmodelHook.dll is the safe Win32 transform core. It exports:
+            MW2VR_ApplyWeaponPlacement
+            MW2VR_HasViewmodelPose
+            MW2VR_ResetWeaponBaselines
 
+          It intentionally does NOT contain a guessed stock-iw4sp.exe detour address yet.
+          The exact single-player viewmodel placement call still needs a verified hook/signature before the DLL can move the visible stock gun automatically. This avoids writing to an unverified campaign address and crashing the game.
+
+          Companion controls:
+          F5  = toggle physical viewmodel pose publishing
           F6  = flip rotational head/controller yaw direction
           F7  = flip physical left/right 6DoF lean direction
           F8  = recenter headset/controller reference
@@ -61,18 +96,25 @@ jobs:
           F10 = toggle 6DoF translation
           F12 = close VR companion
 
-          Rift Touch controls:
-          - Right controller motion: aim adjustment relative to HMD
-          - Right trigger: fire
-          - Left trigger: ADS / scope
-          - Left stick: WASD movement
-          - X: reload
-          - A: jump
+          Touch controls:
+          Right controller aim/grip = weapon pose source
+          Left grip + squeeze       = two-hand foregrip stabilization
+          Right trigger             = fire
+          Left trigger              = ADS / shouldered blend
+          Left stick                = movement
+          X                         = reload
+          A                         = jump
+
+          Optional global weapon calibration examples:
+          MW2CampaignVR.exe --weapon-forward-cm 3 --weapon-up-cm -2 --weapon-pitch 5
+          MW2CampaignVR.exe --shoulder-forward-cm 1 --shoulder-up-cm 0 --shoulder-pitch 0
+
+          ViewmodelSource contains the complete Phase 3B controller/viewmodel code.
           "@ | Set-Content artifact\QUICKSTART.txt
 
-      - name: Upload MW2 Campaign VR build
+      - name: Upload MW2 Campaign VR Phase 3B build
         uses: actions/upload-artifact@v4
         with:
-          name: MW2-Campaign-VR-Phase3A-HorizontalFix-Win64
+          name: MW2-Campaign-VR-Phase3B-ViewmodelCore-Win64-Win32Hook
           path: artifact
           if-no-files-found: error
