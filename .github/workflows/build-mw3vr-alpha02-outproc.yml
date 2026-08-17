@@ -1,113 +1,83 @@
 name: Build MW3VR Alpha 0.2 Oculus OutProc
-
 on:
   push:
-    branches:
-      - mw3vr-outproc-alpha02-oculus
+    branches: [mw3vr-outproc-alpha02-oculus]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Reconstruct verified Alpha 0.2 source
+      - name: Reconstruct verified source
         shell: pwsh
         run: |
-          $paths = 1..14 | ForEach-Object { "mw3vr_alpha02_small\source_part{0:D2}.b64" -f $_ }
-          $b64 = ($paths | ForEach-Object { (Get-Content $_ -Raw).Trim() }) -join ""
-          [IO.File]::WriteAllBytes("MW3VR_alpha02_outproc_source.zip", [Convert]::FromBase64String($b64))
-          $hash = (Get-FileHash "MW3VR_alpha02_outproc_source.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne "10e7b0541e14f7fe4d4a2ff399d8672f4cb068053362a625e0657abfa4554e0c") { throw "Source ZIP hash mismatch: $hash" }
-          Expand-Archive "MW3VR_alpha02_outproc_source.zip" "." -Force
+          $p=1..14|%{"mw3vr_alpha02_small\source_part{0:D2}.b64"-f $_}
+          $b=($p|%{(Get-Content $_ -Raw).Trim()})-join""
+          [IO.File]::WriteAllBytes("src.zip",[Convert]::FromBase64String($b))
+          $h=(Get-FileHash src.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($h-ne"10e7b0541e14f7fe4d4a2ff399d8672f4cb068053362a625e0657abfa4554e0c"){throw"Source hash mismatch: $h"}
+          Expand-Archive src.zip . -Force
 
-      - name: Apply verified Meta Oculus OpenXR patch
+      - name: Apply Oculus primary-runtime rewrite
         shell: pwsh
         run: |
-          $paths = 1..5 | ForEach-Object { "mw3vr_oculus_patch\part{0:D2}.txt" -f $_ }
-          $parts = @()
-          for ($i = 0; $i -lt $paths.Count; $i++) {
-            $raw = (Get-Content $paths[$i] -Raw).Replace("`r`n", "`n")
-            $raw = $raw.TrimEnd("`r", "`n")
-            if ($i -eq $paths.Count - 1) { $raw += "`n" }
-            $parts += $raw
+          $p=1..5|%{"mw3vr_oculus_patch\part{0:D2}.txt"-f $_}
+          $a=@()
+          for($i=0;$i-lt$p.Count;$i++){
+            $r=(Get-Content $p[$i] -Raw).Replace("`r`n","`n").TrimEnd("`r","`n")
+            if($i-eq$p.Count-1){$r+="`n"}
+            $a+=$r
           }
-          $patch = $parts -join ""
-          [IO.File]::WriteAllText("mw3vr_alpha02_oculus.patch", $patch, [Text.UTF8Encoding]::new($false))
-          $hash = (Get-FileHash "mw3vr_alpha02_oculus.patch" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne "fe7bdc96d323e7705b1521b564098e3ebfd7662db7789439ceabffe96f17eaed") { throw "Oculus patch hash mismatch: $hash" }
-          git apply --check --directory=MW3VR_alpha02_outproc mw3vr_alpha02_oculus.patch
-          if ($LASTEXITCODE -ne 0) { throw "Oculus patch check failed" }
-          git apply --directory=MW3VR_alpha02_outproc mw3vr_alpha02_oculus.patch
-          if ($LASTEXITCODE -ne 0) { throw "Oculus patch apply failed" }
-          if (-not (Select-String -Path "MW3VR_alpha02_outproc\mw3vr.ini" -Pattern "ForceOculusOpenXR=1" -Quiet)) { throw "Oculus runtime default missing" }
-          if (-not (Select-String -Path "MW3VR_alpha02_outproc\src\host_main.cpp" -Pattern "ForceOculusRuntime" -Quiet)) { throw "Oculus host code missing" }
-
-      - name: Configure Win32 MW3 bridge
-        shell: cmd
-        run: cmake -S MW3VR_alpha02_outproc -B build-plugin -A Win32
+          [IO.File]::WriteAllText("oculus.patch",($a-join""),[Text.UTF8Encoding]::new($false))
+          Write-Host "Transported patch SHA256=$((Get-FileHash oculus.patch -Algorithm SHA256).Hash)"
+          git apply --check --directory=MW3VR_alpha02_outproc oculus.patch
+          if($LASTEXITCODE-ne0){throw"Oculus patch check failed"}
+          git apply --directory=MW3VR_alpha02_outproc oculus.patch
+          if($LASTEXITCODE-ne0){throw"Oculus patch apply failed"}
+          if(-not(Select-String -Path MW3VR_alpha02_outproc\mw3vr.ini -Pattern "ForceOculusOpenXR=1" -Quiet)){throw"Oculus INI default missing"}
+          if(-not(Select-String -Path MW3VR_alpha02_outproc\src\host_main.cpp -Pattern "ForceOculusRuntime" -Quiet)){throw"Oculus host rewrite missing"}
+          if(Select-String -Path MW3VR_alpha02_outproc\src\host_main.cpp -Pattern "ForceSteamVrRuntime" -Quiet){throw"Old SteamVR force path still present"}
 
       - name: Build Win32 MW3 bridge
         shell: cmd
-        run: cmake --build build-plugin --config Release --target mw3vr
+        run: cmake -S MW3VR_alpha02_outproc -B build-plugin -A Win32 && cmake --build build-plugin --config Release --target mw3vr
 
-      - name: Clone Khronos OpenXR SDK 1.1.61
+      - name: Clone OpenXR SDK
         shell: cmd
         run: git clone --depth 1 --branch release-1.1.61 https://github.com/KhronosGroup/OpenXR-SDK.git openxr-sdk
 
-      - name: Configure x64 Meta Oculus OpenXR host
-        shell: cmd
-        run: cmake -S MW3VR_alpha02_outproc -B build-host -A x64 -DFETCHCONTENT_SOURCE_DIR_OPENXR_SDK=%CD%\openxr-sdk
-
       - name: Build x64 Meta Oculus OpenXR host
         shell: cmd
-        run: cmake --build build-host --config Release --target MW3VRHost
+        run: cmake -S MW3VR_alpha02_outproc -B build-host -A x64 -DFETCHCONTENT_SOURCE_DIR_OPENXR_SDK=%CD%\openxr-sdk && cmake --build build-host --config Release --target MW3VRHost
 
-      - name: Fetch Ultimate ASI Loader Win32 D3D9
+      - name: Fetch ASI loader
         shell: pwsh
         run: |
-          Invoke-WebRequest "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/Win32-latest/d3d9-Win32.zip" -OutFile "d3d9-Win32.zip"
-          Expand-Archive "d3d9-Win32.zip" "ual" -Force
-          if (-not (Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1)) { throw "ASI loader not found" }
+          Invoke-WebRequest "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/Win32-latest/d3d9-Win32.zip" -OutFile loader.zip
+          Expand-Archive loader.zip ual -Force
 
-      - name: Package Oculus Alpha 0.2
+      - name: Package Oculus build
         shell: pwsh
         run: |
-          $asi = Get-ChildItem "build-plugin" -Recurse -File -Filter "MW3VR.asi" | Select-Object -First 1
-          $hostExe = Get-ChildItem "build-host" -Recurse -File -Filter "MW3VRHost.exe" | Select-Object -First 1
-          $loader = Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1
-          if (-not $asi -or -not $hostExe -or -not $loader) { throw "One or more package binaries missing" }
-          New-Item -ItemType Directory -Force "artifact\plugins" | Out-Null
-          Copy-Item $loader.FullName "artifact\d3d9.dll"
-          Copy-Item $hostExe.FullName "artifact\MW3VRHost.exe"
-          Copy-Item $asi.FullName "artifact\plugins\MW3VR.asi"
-          Copy-Item "MW3VR_alpha02_outproc\mw3vr.ini" "artifact\plugins\mw3vr.ini"
-          Copy-Item "MW3VR_alpha02_outproc\README.md" "artifact\README.md"
-          Copy-Item "MW3VR_alpha02_outproc\THIRD_PARTY_NOTICES.md" "artifact\THIRD_PARTY_NOTICES.md"
-          @(
-            "MW3VR OpenXR Alpha 0.2 - Meta/Oculus Primary Runtime Build",
-            "",
-            "Remove/replace the previous SteamVR Alpha 0.2 MW3VR files first.",
-            "Start and connect Meta Quest Link or Air Link, then launch MW3 Single Player.",
-            "",
-            "Default runtime settings:",
-            "  ForceOculusOpenXR=1",
-            "  AutoStartMetaQuestLink=1",
-            "  OculusRuntimeJson=",
-            "",
-            "The x64 MW3VRHost.exe forces the installed Meta/Oculus OpenXR runtime for this process only.",
-            "Logs: mw3vr.log and mw3vr_host.log",
-            "Alpha limitation: the same MW3 camera image is submitted to both eyes; true stereo is not implemented yet."
-          ) | Set-Content "artifact\QUICKSTART.txt"
-          Get-FileHash "artifact\d3d9.dll" -Algorithm SHA256 | Out-File "artifact\SHA256.txt"
-          Get-FileHash "artifact\MW3VRHost.exe" -Algorithm SHA256 | Out-File "artifact\SHA256.txt" -Append
-          Get-FileHash "artifact\plugins\MW3VR.asi" -Algorithm SHA256 | Out-File "artifact\SHA256.txt" -Append
+          $asi=Get-ChildItem build-plugin -Recurse -File -Filter MW3VR.asi|select -First 1
+          $hostExe=Get-ChildItem build-host -Recurse -File -Filter MW3VRHost.exe|select -First 1
+          $loader=Get-ChildItem ual -Recurse -File -Filter d3d9.dll|select -First 1
+          if(-not$asi-or-not$hostExe-or-not$loader){throw"Package binary missing"}
+          mkdir artifact\plugins -Force|Out-Null
+          cp $loader.FullName artifact\d3d9.dll
+          cp $hostExe.FullName artifact\MW3VRHost.exe
+          cp $asi.FullName artifact\plugins\MW3VR.asi
+          cp MW3VR_alpha02_outproc\mw3vr.ini artifact\plugins\mw3vr.ini
+          cp MW3VR_alpha02_outproc\README.md artifact\README.md
+          cp MW3VR_alpha02_outproc\THIRD_PARTY_NOTICES.md artifact\THIRD_PARTY_NOTICES.md
+          @("MW3VR Alpha 0.2 Meta/Oculus Primary OpenXR","","Start/connect Meta Quest Link or Air Link before MW3.","ForceOculusOpenXR=1","AutoStartMetaQuestLink=1","OculusRuntimeJson=","","Logs: mw3vr.log and mw3vr_host.log","OpenXR runs in the separate x64 MW3VRHost.exe, not iw5sp.exe.")|Set-Content artifact\QUICKSTART.txt
+          Get-FileHash artifact\d3d9.dll -Algorithm SHA256|Out-File artifact\SHA256.txt
+          Get-FileHash artifact\MW3VRHost.exe -Algorithm SHA256|Out-File artifact\SHA256.txt -Append
+          Get-FileHash artifact\plugins\MW3VR.asi -Algorithm SHA256|Out-File artifact\SHA256.txt -Append
 
-      - name: Upload compiled package
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: MW3VR-OpenXR-Alpha02-OutProc-Oculus
           path: artifact
