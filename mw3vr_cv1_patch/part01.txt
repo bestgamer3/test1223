@@ -1,0 +1,31 @@
+--- a/README.md
++++ b/README.md
+@@ -1,8 +1,8 @@
+-# MW3VR OpenXR Alpha 0.2 Oculus/Meta runtime build
++# MW3VR OpenXR Alpha 0.2-CV1 native Oculus PC runtime build
+ 
+-This variant keeps OpenXR out of `iw5sp.exe`: the 32-bit ASI bridge captures MW3, while the separate 64-bit `MW3VRHost.exe` owns the OpenXR session. The host prefers the installed Meta/Oculus PC OpenXR runtime per-process using `XR_RUNTIME_JSON`, so SteamVR does not need to be the active runtime for this build.
++This CV1 variant keeps OpenXR out of `iw5sp.exe`: the 32-bit ASI bridge captures MW3, while the separate 64-bit `MW3VRHost.exe` owns the native Oculus PC OpenXR session. It starts/waits for `OVRService` and `OVRServer_x64.exe`, prioritizes the legacy Oculus PC 64-bit OpenXR manifest, and does not require Quest Link or Air Link.
+ 
+-For Quest Link/Air Link, start/connect Meta Quest Link before launching MW3 (the host can start the desktop client when found, but it cannot approve or enter Link mode inside the headset for you).
++For Oculus Rift CV1, connect the headset and sensors normally through the Oculus/Meta PC software. Quest Link/Air Link is not used by this build.
+ 
+ # MW3VR OpenXR — Call of Duty: Modern Warfare 3 (2011) Single-Player VR
+ 
+@@ -47,7 +47,7 @@
+ 
+ - Windows 10 or Windows 11.
+ - A legitimate PC installation of Call of Duty: Modern Warfare 3 (2011).
+-- Meta Quest Link PC software with its OpenXR runtime installed, plus a Quest connected through Link or Air Link.
++- Oculus/Meta PC software with Rift CV1 configured and its 64-bit OpenXR runtime installed.
+ - Visual Studio 2022 with **Desktop development with C++** and CMake tools to build from source.
+ - Internet access on the first CMake configure if OpenXR-SDK is not already installed; CMake fetches Khronos OpenXR-SDK `release-1.1.61`.
+ 
+--- a/mw3vr.ini
++++ b/mw3vr.ini
+@@ -13,12 +13,15 @@
+ PresentFallbackHooks=0
+ BridgeCaptureHz=45
+ 
+-; Host OpenXR settings. Meta/Oculus is forced per-process; this does not change
+-; the system-wide 
