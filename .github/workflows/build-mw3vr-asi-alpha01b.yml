@@ -42,11 +42,13 @@ jobs:
           Set-Content "mw3vr_alpha01c.patch" -Value $patch -NoNewline
           $hash = (Get-FileHash "mw3vr_alpha01c.patch" -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne "c94f4e2e16f1a6b8c226e8e9e3a5fcd62b06a6834ac63269105e45eb1dfa2395") { throw "Alpha 0.1c patch hash mismatch: $hash" }
-          Push-Location MW3VR_ASI
-          git apply "..\mw3vr_alpha01c.patch"
-          Pop-Location
+          git apply --check --directory=MW3VR_ASI "mw3vr_alpha01c.patch"
+          if ($LASTEXITCODE -ne 0) { throw "Alpha 0.1c patch preflight failed." }
+          git apply --directory=MW3VR_ASI "mw3vr_alpha01c.patch"
+          if ($LASTEXITCODE -ne 0) { throw "Alpha 0.1c patch application failed." }
           if (-not (Select-String -Path "MW3VR_ASI\src\asi_entry.cpp" -Pattern "alpha 0.1c" -Quiet)) { throw "0.1c version marker missing." }
           if (-not (Select-String -Path "MW3VR_ASI\mw3vr.ini" -Pattern "NativeHeadTracking=0" -Quiet)) { throw "Safe native-head default missing." }
+          Write-Host "Alpha 0.1c safety patch applied and verified."
 
       - name: Force MW3VR target to dynamic MSVC CRT
         shell: pwsh
