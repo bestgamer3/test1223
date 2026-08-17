@@ -1,4 +1,4 @@
-name: Build MW2 Campaign VR Phase 3E2 Captured-Target Weapon-Only Viewmodel
+name: Build MW2 Campaign VR Phase 3E4 Axis-Cluster Weapon-Only Viewmodel
 
 on:
   workflow_dispatch:
@@ -30,11 +30,11 @@ jobs:
         shell: cmd
         run: cmake --build build64 --config Release --target MW2CampaignVR
 
-      - name: Configure Win32 captured-target weapon-only viewmodel hook
+      - name: Configure Win32 axis-cluster weapon-only viewmodel hook
         shell: cmd
         run: cmake -S source\sp_vr\viewmodel_hook -B build32hook -A Win32
 
-      - name: Build Win32 captured-target weapon-only viewmodel hook
+      - name: Build Win32 axis-cluster weapon-only viewmodel hook
         shell: cmd
         run: cmake --build build32hook --config Release --target MW2VRViewmodelHook
 
@@ -56,10 +56,8 @@ jobs:
           if (-not $exe) { throw 'MW2CampaignVR.exe not found after x64 build' }
           $openxr = Get-ChildItem $exe.Directory.FullName -Filter openxr_loader.dll | Select-Object -First 1
           if (-not $openxr) { throw 'openxr_loader.dll not found beside MW2CampaignVR.exe' }
-
           $hook = Get-ChildItem build32hook -Recurse -Filter MW2VRViewmodelHook.dll | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
           if (-not $hook) { throw 'MW2VRViewmodelHook.dll not found after Win32 build' }
-
           $hookLoader = Get-ChildItem build32loader -Recurse -Filter MW2VRHookLoader.exe | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
           if (-not $hookLoader) { throw 'MW2VRHookLoader.exe not found after Win32 build' }
 
@@ -76,7 +74,7 @@ jobs:
           Copy-Item source\sp_vr\src\VRViewmodelBridge.cpp artifact\ViewmodelSource\VRViewmodelBridge.cpp
           Copy-Item source\sp_vr\viewmodel_hook\MW2VRFinalViewmodelPlacement.cpp artifact\ViewmodelSource\MW2VRFinalViewmodelPlacement.cpp
           Copy-Item source\sp_vr\viewmodel_hook\MW2VRLiveHook.cpp artifact\ViewmodelSource\MW2VRLiveHook.cpp
-          Copy-Item source\sp_vr\viewmodel_hook\MW2VRLiveHookBridge.cpp artifact\ViewmodelSource\MW2VRLiveHookBridge.cpp
+          Copy-Item source\sp_vr\viewmodel_hook\MW2VRLiveHookAxisCluster.cpp artifact\ViewmodelSource\MW2VRLiveHookAxisCluster.cpp
           Copy-Item source\sp_vr\viewmodel_hook\MW2VRHandsFilter.cpp artifact\ViewmodelSource\MW2VRHandsFilter.cpp
           Copy-Item source\sp_vr\viewmodel_hook\MW2VRHandsFilterBridge.cpp artifact\ViewmodelSource\MW2VRHandsFilterBridge.cpp
           Copy-Item source\sp_vr\viewmodel_hook\MW2VRViewmodelHook.def artifact\ViewmodelSource\MW2VRViewmodelHook.def
@@ -96,43 +94,29 @@ jobs:
           "@ | Set-Content artifact\START_MW2_VR_WITH_WEAPON_HOOK.bat
 
           @"
-          MW2 Campaign VR Phase 3E2 - CAPTURED-TARGET WEAPON-ONLY VR VIEWMODEL
-          Targets Call of Duty: Modern Warfare 2 (2009) single-player iw4sp.exe only.
+          MW2 Campaign VR Phase 3E4 - AXIS-CLUSTER WEAPON-ONLY VR VIEWMODEL
 
-          WHY THIS BUILD EXISTS
-          Phase 3E could fail with:
-          [MW2VR][HANDS] could not validate the original CG_AddPlayerWeapon callsite; no hand filter installed.
+          This build fixes retail SP layouts where cg_drawGun is far away from cg_gun_x/y/z.
+          The locator now anchors on the tightest cg_gun_x/y/z code cluster only and treats cg_drawGun as secondary diagnostic information.
 
-          Phase 3E2 removes that duplicated locator from the normal install path.
-          1. The proven Phase 3D live viewmodel hook installs first.
-          2. That hook saves the exact original CG_AddPlayerWeapon target from the user's iw4sp.exe.
-          3. The hand/arm filter reads that captured original target directly.
-          4. It then scans only inside that verified function for the first-person DObj getter.
-
-          QUICK START
-          1. Fully close iw4sp.exe and all older MW2 VR helper processes.
-          2. Replace the previous Phase 3E files with every file from this package.
-          3. Start Oculus/Meta OpenXR and connect Rift CV1 + Touch controllers.
+          TEST
+          1. Fully close MW2 and old VR helpers.
+          2. Delete MW2VRViewmodelHook.log.
+          3. Replace the previous package files with this build.
           4. Run START_MW2_VR_WITH_WEAPON_HOOK.bat.
 
-          EXPECTED LOG ORDER
+          Useful new log lines:
+          [MW2VR] smallest cg_gun_x/y/z window ... span=...
+          [MW2VR] post-axis scan produced ... plausible five-argument submit call(s)
+          [MW2VR] axis submit[...] ... axisDist=... drawDist=...
           [MW2VR] LIVE HOOK INSTALLED
-          [MW2VR][HANDS] reusing captured original CG_AddPlayerWeapon target at XXXXXXXX
-          [MW2VR][HANDS] WEAPON-ONLY FILTER INSTALLED using the captured Phase 3D CG_AddPlayerWeapon target
 
-          Once a campaign weapon is rendered, the log should additionally show:
-          [MW2VR][HANDS] weapon-only VR filter active
-          and model lines identifying which stock hand/arm submodel was hidden.
-
-          EXPECTED RESULT
-          MW2's baked two-handed FPS arms are hidden while the real weapon viewmodel remains visible and follows the tracked right Touch controller. Reload/firing/bolt/magazine/attachment animation data stays on the MW2 weapon model.
-
-          If this build now reaches the DObj stage but refuses there, send MW2VRViewmodelHook.log. The new log will identify the next exact condition rather than failing at the duplicate outer locator.
+          After that, the captured-target hand filter should install and hide stock baked FPS hands/arms while keeping the real weapon model controller-driven.
           "@ | Set-Content artifact\QUICKSTART.txt
 
-      - name: Upload MW2 Campaign VR Phase 3E2 build
+      - name: Upload MW2 Campaign VR Phase 3E4 build
         uses: actions/upload-artifact@v4
         with:
-          name: MW2-Campaign-VR-Phase3E2-CapturedTarget-WeaponOnly-Win64-Win32
+          name: MW2-Campaign-VR-Phase3E4-AxisCluster-WeaponOnly-Win64-Win32
           path: artifact
           if-no-files-found: error
