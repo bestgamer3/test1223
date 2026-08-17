@@ -1,5 +1,6 @@
 name: Build MW2 VR Phase 1
 
+# Triggered by pushes to this workflow file or manually from Actions.
 on:
   workflow_dispatch:
   push:
