@@ -1,4 +1,4 @@
-D waitMs = static_cast<DWORD>(std::max(1000,
+D waitMs = static_cast<DWORD>(std::max<UINT>(1000u,
 +        GetPrivateProfileIntW(L"VR", L"CV1RuntimeWaitMs", 15000, g_iniPath)));
 +
 +    HostLog("Oculus CV1: preparing native Oculus PC runtime (no Link/Air Link required).");
