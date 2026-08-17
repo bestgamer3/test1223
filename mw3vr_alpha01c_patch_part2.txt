@@ -1,0 +1,128 @@
+-    Log::Write("Config: enabled=%d nativeHead=%d yawScale=%.3f pitchScale=%.3f HFOV=%.1f unknownWrites=%d overrideRva=0x%08lX",
++    Log::Write("Config: ini=%ls enabled=%d nativeHead=%d delayMs=%lu presentFallbacks=%d yawScale=%.3f pitchScale=%.3f HFOV=%.1f unknownWrites=%d overrideRva=0x%08lX",
++        g_iniPath,
+         g_config.enabled ? 1 : 0,
+         g_config.nativeHeadTracking ? 1 : 0,
++        static_cast<unsigned long>(g_config.startupDelayMs),
++        g_config.presentFallbackHooks ? 1 : 0,
+         g_config.headYawScale,
+         g_config.headPitchScale,
+         g_config.gameHFovDegrees,
+diff --git a/src/config.h b/src/config.h
+index 830ab55..b0e59ea 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -4,12 +4,14 @@
+ 
+ struct ModConfig {
+     bool enabled = true;
+-    bool nativeHeadTracking = true;
++    bool nativeHeadTracking = false;
+     float headYawScale = -1.0f;
+     float headPitchScale = -1.0f;
+     float maxHeadDeltaDegrees = 20.0f;
+     int recenterKey = VK_F8;
+     float gameHFovDegrees = 90.0f;
++    uint32_t startupDelayMs = 5000;
++    bool presentFallbackHooks = false;
+     bool allowUnknownExeNativeWrites = false;
+     uintptr_t unknownExeAngleAccumulatorRva = 0;
+     bool logFrames = false;
+diff --git a/src/d3d9_hooks.cpp b/src/d3d9_hooks.cpp
+index 5fff388..dd6ad6d 100644
+--- a/src/d3d9_hooks.cpp
++++ b/src/d3d9_hooks.cpp
+@@ -1,5 +1,6 @@
+ #include "d3d9_hooks.h"
+ #include "openxr_runtime.h"
++#include "config.h"
+ #include "log.h"
+ #include <windows.h>
+ #include <d3d9.h>
+@@ -46,6 +47,8 @@ SwapChainPresentFn g_originalSwapChainPresent = nullptr;
+ 
+ ULONGLONG g_lastEndSceneMs = 0;
+ LONG g_inVrCallback = 0;
++LONG g_vrFaulted = 0;
++ULONGLONG g_vrEnableAtMs = 0;
+ 
+ HRESULT WINAPI Hook_Reset(IDirect3DDevice9* This, D3DPRESENT_PARAMETERS* params);
+ HRESULT WINAPI Hook_EndScene(IDirect3DDevice9* This);
+@@ -89,9 +92,21 @@ bool PatchSlot(void* object, size_t index, void* replacement, void** original)
+ 
+ void RunVrOnce(IDirect3DDevice9* device)
+ {
+-    if (!device) return;
++    if (!device || InterlockedCompareExchange(&g_vrFaulted, 0, 0) != 0) return;
++    if (g_vrEnableAtMs != 0 && GetTickCount64() < g_vrEnableAtMs) return;
+     if (InterlockedCompareExchange(&g_inVrCallback, 1, 0) != 0) return;
+-    VrRuntime::OnD3D9Frame(device);
++
++    // Keep an alpha-stage VR fault from terminating iw5sp.exe. If the callback raises
++    // an access violation or another SEH exception, disable VR callbacks and leave the
++    // game running so mw3vr.log can tell us where initialization reached.
++    __try {
++        VrRuntime::OnD3D9Frame(device);
++    } __except (EXCEPTION_EXECUTE_HANDLER) {
++        const DWORD code = GetExceptionCode();
++        Log::Write("MW3VR: VR callback raised SEH 0x%08lX; disabling VR callbacks for this run.", code);
++        InterlockedExchange(&g_vrFaulted, 1);
++    }
++
+     InterlockedExchange(&g_inVrCallback, 0);
+ }
+ 
+@@ -114,9 +129,17 @@ void InstallSwapChainHook(IDirect3DDevice9* device)
+ 
+ HRESULT WINAPI Hook_Reset(IDirect3DDevice9* This, D3DPRESENT_PARAMETERS* params)
+ {
+-    VrRuntime::OnD3D9Reset();
++    if (InterlockedCompareExchange(&g_vrFaulted, 0, 0) == 0) {
++        __try {
++            VrRuntime::OnD3D9Reset();
++        } __except (EXCEPTION_EXECUTE_HANDLER) {
++            const DWORD code = GetExceptionCode();
++            Log::Write("MW3VR: reset callback raised SEH 0x%08lX; disabling VR callbacks for this run.", code);
++            InterlockedExchange(&g_vrFaulted, 1);
++        }
++    }
+     const HRESULT hr = g_originalReset ? g_originalReset(This, params) : D3DERR_INVALIDCALL;
+-    if (SUCCEEDED(hr)) InstallSwapChainHook(This);
++    if (SUCCEEDED(hr) && GetConfig().presentFallbackHooks) InstallSwapChainHook(This);
+     return hr;
+ }
+ 
+@@ -163,13 +186,16 @@ void InstallDeviceHooks(IDirect3DDevice9* device)
+ 
+     const bool resetOk = PatchSlot(device, kDeviceResetIndex,
+         reinterpret_cast<void*>(&Hook_Reset), reinterpret_cast<void**>(&g_originalReset));
+-    const bool presentOk = PatchSlot(device, kDevicePresentIndex,
+-        reinterpret_cast<void*>(&Hook_DevicePresent), reinterpret_cast<void**>(&g_originalDevicePresent));
++    bool presentOk = false;
++    if (GetConfig().presentFallbackHooks) {
++        presentOk = PatchSlot(device, kDevicePresentIndex,
++            reinterpret_cast<void*>(&Hook_DevicePresent), reinterpret_cast<void**>(&g_originalDevicePresent));
++    }
+     const bool endSceneOk = PatchSlot(device, kDeviceEndSceneIndex,
+         reinterpret_cast<void*>(&Hook_EndScene), reinterpret_cast<void**>(&g_originalEndScene));
+ 
+-    InstallSwapChainHook(device);
+-    Log::Write("D3D9 device hooks: Reset=%d Present=%d EndScene=%d", resetOk ? 1 : 0, presentOk ? 1 : 0, endSceneOk ? 1 : 0);
++    if (GetConfig().presentFallbackHooks) InstallSwapChainHook(device);
++    Log::Write("D3D9 device hooks: Reset=%d PresentFallback=%d EndScene=%d", resetOk ? 1 : 0, presentOk ? 1 : 0, endSceneOk ? 1 : 0);
+ }
+ 
+ HRESULT WINAPI Hook_CreateDevice(
+@@ -185,7 +211,11 @@ HRESULT WINAPI Hook_CreateDevice(
+     const HRESULT hr = g_originalCreateDevice(This, Adapter, DeviceType, hFocusWindow, BehaviorFlags, params, outDevice);
+     if (SUCCEEDED(hr) && outDevice && *outDevice) {
+         Log::Write("D3D9 CreateDevice: adapter=%u type=%d hwnd=%p device=%p", Adapter, static_cast<int>(DeviceType), hFocusWindow, *outDevice);
+-        if (DeviceType == D3DDEVTYPE_HAL) InstallDeviceHooks(*outDevice);
++        if (DeviceType == D3DDEVTYPE_HAL) {
++            g_vrEnableAtMs = GetTickCount64() + GetConfig().startupDelayMs;
++            Log::Write("MW3VR: delaying first VR callback by %lu ms.", static_cast<unsigned long>(GetConfig().startupDelayMs));
++            InstallDeviceHooks(*outDevice);
++        }
+     }
+     return hr;
+ }
