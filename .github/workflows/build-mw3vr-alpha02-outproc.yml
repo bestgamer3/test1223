@@ -1,7 +1,7 @@
-name: Build MW3VR Alpha 0.2 Oculus OutProc
+name: Build MW3VR Alpha 0.2 CV1
 on:
   push:
-    branches: [mw3vr-outproc-alpha02-oculus]
+    branches: [mw3vr-outproc-alpha02-cv1]
   workflow_dispatch:
 
 jobs:
@@ -31,14 +31,31 @@ jobs:
             $a+=$r
           }
           [IO.File]::WriteAllText("oculus.patch",($a-join""),[Text.UTF8Encoding]::new($false))
-          Write-Host "Transported patch SHA256=$((Get-FileHash oculus.patch -Algorithm SHA256).Hash)"
           git apply --check --directory=MW3VR_alpha02_outproc oculus.patch
           if($LASTEXITCODE-ne0){throw"Oculus patch check failed"}
           git apply --directory=MW3VR_alpha02_outproc oculus.patch
           if($LASTEXITCODE-ne0){throw"Oculus patch apply failed"}
-          if(-not(Select-String -Path MW3VR_alpha02_outproc\mw3vr.ini -Pattern "ForceOculusOpenXR=1" -Quiet)){throw"Oculus INI default missing"}
-          if(-not(Select-String -Path MW3VR_alpha02_outproc\src\host_main.cpp -Pattern "ForceOculusRuntime" -Quiet)){throw"Oculus host rewrite missing"}
-          if(Select-String -Path MW3VR_alpha02_outproc\src\host_main.cpp -Pattern "ForceSteamVrRuntime" -Quiet){throw"Old SteamVR force path still present"}
+
+      - name: Apply CV1 native-runtime rewrite
+        shell: pwsh
+        run: |
+          $p=1..7|%{"mw3vr_cv1_patch\part{0:D2}.txt"-f $_}
+          $a=@()
+          for($i=0;$i-lt$p.Count;$i++){
+            $r=(Get-Content $p[$i] -Raw).Replace("`r`n","`n").TrimEnd("`r","`n")
+            if($i-eq$p.Count-1){$r+="`n"}
+            $a+=$r
+          }
+          [IO.File]::WriteAllText("cv1.patch",($a-join""),[Text.UTF8Encoding]::new($false))
+          Write-Host "CV1 transported patch SHA256=$((Get-FileHash cv1.patch -Algorithm SHA256).Hash)"
+          git apply --check --directory=MW3VR_alpha02_outproc cv1.patch
+          if($LASTEXITCODE-ne0){throw"CV1 patch check failed"}
+          git apply --directory=MW3VR_alpha02_outproc cv1.patch
+          if($LASTEXITCODE-ne0){throw"CV1 patch apply failed"}
+          if(-not(Select-String MW3VR_alpha02_outproc\src\host_main.cpp -Pattern "EnsureServiceRunning" -Quiet)){throw"CV1 service bootstrap missing"}
+          if(-not(Select-String MW3VR_alpha02_outproc\src\host_main.cpp -Pattern "OVRServer_x64.exe" -Quiet)){throw"CV1 OVRServer wait missing"}
+          if(-not(Select-String MW3VR_alpha02_outproc\mw3vr.ini -Pattern "AutoStartOculusPC=1" -Quiet)){throw"CV1 INI default missing"}
+          if(-not(Select-String MW3VR_alpha02_outproc\mw3vr.ini -Pattern "CV1RuntimeWaitMs=15000" -Quiet)){throw"CV1 wait setting missing"}
 
       - name: Build Win32 MW3 bridge
         shell: cmd
@@ -48,7 +65,7 @@ jobs:
         shell: cmd
         run: git clone --depth 1 --branch release-1.1.61 https://github.com/KhronosGroup/OpenXR-SDK.git openxr-sdk
 
-      - name: Build x64 Meta Oculus OpenXR host
+      - name: Build x64 Rift CV1 OpenXR host
         shell: cmd
         run: cmake -S MW3VR_alpha02_outproc -B build-host -A x64 -DFETCHCONTENT_SOURCE_DIR_OPENXR_SDK=%CD%\openxr-sdk && cmake --build build-host --config Release --target MW3VRHost
 
@@ -58,7 +75,7 @@ jobs:
           Invoke-WebRequest "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/Win32-latest/d3d9-Win32.zip" -OutFile loader.zip
           Expand-Archive loader.zip ual -Force
 
-      - name: Package Oculus build
+      - name: Package CV1 build
         shell: pwsh
         run: |
           $asi=Get-ChildItem build-plugin -Recurse -File -Filter MW3VR.asi|select -First 1
@@ -72,13 +89,13 @@ jobs:
           cp MW3VR_alpha02_outproc\mw3vr.ini artifact\plugins\mw3vr.ini
           cp MW3VR_alpha02_outproc\README.md artifact\README.md
           cp MW3VR_alpha02_outproc\THIRD_PARTY_NOTICES.md artifact\THIRD_PARTY_NOTICES.md
-          @("MW3VR Alpha 0.2 Meta/Oculus Primary OpenXR","","Start/connect Meta Quest Link or Air Link before MW3.","ForceOculusOpenXR=1","AutoStartMetaQuestLink=1","OculusRuntimeJson=","","Logs: mw3vr.log and mw3vr_host.log","OpenXR runs in the separate x64 MW3VRHost.exe, not iw5sp.exe.")|Set-Content artifact\QUICKSTART.txt
+          @("MW3VR Alpha 0.2-CV1 native Oculus PC OpenXR","","For Oculus Rift CV1. Quest Link/Air Link is NOT used.","Connect the CV1/sensors normally and start the Oculus/Meta PC software.","ForceOculusOpenXR=1","AutoStartOculusPC=1","CV1RuntimeWaitMs=15000","","The host starts/waits for OVRService and OVRServer_x64.exe before OpenXR.","Logs: mw3vr.log and mw3vr_host.log")|Set-Content artifact\QUICKSTART.txt
           Get-FileHash artifact\d3d9.dll -Algorithm SHA256|Out-File artifact\SHA256.txt
           Get-FileHash artifact\MW3VRHost.exe -Algorithm SHA256|Out-File artifact\SHA256.txt -Append
           Get-FileHash artifact\plugins\MW3VR.asi -Algorithm SHA256|Out-File artifact\SHA256.txt -Append
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MW3VR-OpenXR-Alpha02-OutProc-Oculus
+          name: MW3VR-OpenXR-Alpha02-CV1
           path: artifact
           if-no-files-found: error
