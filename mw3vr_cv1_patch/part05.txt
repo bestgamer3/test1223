@@ -1,0 +1,48 @@
+D waitMs = static_cast<DWORD>(std::max(1000,
++        GetPrivateProfileIntW(L"VR", L"CV1RuntimeWaitMs", 15000, g_iniPath)));
++
++    HostLog("Oculus CV1: preparing native Oculus PC runtime (no Link/Air Link required).");
++    StartOculusClientIfNeeded(manifest);
++
++    // OVRService owns the native Rift PC runtime. Starting/waiting here avoids
++    // racing xrCreateInstance/xrGetSystem while the CV1 compositor is still booting.
++    const bool serviceReady = EnsureServiceRunning(L"OVRService", waitMs);
++    const bool serverReady = WaitForProcess(L"OVRServer_x64.exe", waitMs);
++    if (!serverReady) {
++        HostLog("Oculus CV1: OVRServer_x64.exe was not ready after %lu ms.", waitMs);
++        return false;
+     }
++
++    HostLog("Oculus CV1: Oculus PC runtime ready (OVRService=%d OVRServer_x64=1).",
++        serviceReady ? 1 : 0);
++    return true;
+ }
+ 
+ bool ForceOculusRuntime(std::wstring& selected)
+@@ -405,8 +502,11 @@
+         HostLog("OpenXR runtime: SetEnvironmentVariable(XR_RUNTIME_JSON) failed err=%lu", GetLastError());
+         return false;
+     }
+-    HostLog("OpenXR runtime: forced Meta/Oculus XR_RUNTIME_JSON=%ls", selected.c_str());
+-    AutoStartMetaQuestLink(selected);
++    HostLog("OpenXR runtime: forced Oculus PC XR_RUNTIME_JSON=%ls", selected.c_str());
++    if (!PrepareOculusPcRuntimeForCv1(selected)) {
++        HostLog("OpenXR runtime: Oculus CV1 PC runtime was not ready; will retry.");
++        return false;
++    }
+     return true;
+ }
+ 
+@@ -554,7 +654,7 @@
+ {
+     std::wstring selected;
+     if (!ForceOculusRuntime(selected)) {
+-        PublishStatus("Meta/Oculus OpenXR runtime manifest not found", -10);
++        PublishStatus("Oculus PC OpenXR runtime manifest not found", -10);
+         return false;
+     }
+ 
+@@ -568,7 +668,7 @@
+     for (const auto& e : exts) if (strcmp(e.extensionName, XR_KHR_D3D11_ENABLE_EXTENSION_NAME) == 0) d3d11 = true;
+     if (!d3d11) {
+         HostLog("OpenXR: selected runtime does not expose XR_KHR_D3D11_enable.");
