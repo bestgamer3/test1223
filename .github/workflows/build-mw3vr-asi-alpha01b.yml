@@ -73,9 +73,13 @@ jobs:
           Select-String -Path "MW3VR_ASI\src\asi_entry.cpp" -Pattern "alpha 0.1c" -Quiet | Out-Null
           Select-String -Path "MW3VR_ASI\mw3vr.ini" -Pattern "NativeHeadTracking=0" -Quiet | Out-Null
 
+      - name: Clone Khronos OpenXR SDK 1.1.61
+        shell: cmd
+        run: git clone --depth 1 --branch release-1.1.61 https://github.com/KhronosGroup/OpenXR-SDK.git openxr-sdk
+
       - name: Configure Win32 Release
         shell: cmd
-        run: cmake -S MW3VR_ASI -B build-mw3vr-asi -A Win32
+        run: cmake -S MW3VR_ASI -B build-mw3vr-asi -A Win32 -DFETCHCONTENT_SOURCE_DIR_OPENXR_SDK=%CD%\openxr-sdk
 
       - name: Build MW3VR ASI
         shell: cmd
