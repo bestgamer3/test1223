@@ -1,0 +1,83 @@
+ Legacy/default location used by Meta Quest Link/Oculus PC software.
++    roots.emplace_back(L"C:\\Program Files\\Oculus\\Support\\oculus-runtime");
++    roots.emplace_back(L"C:\\Program Files\\Meta Quest Link\\Support\\oculus-runtime");
++
++    for (const auto& root : roots) SearchOculusJsons(root, candidates);
+ 
+     for (const auto& c : candidates) {
+         HostLog("OpenXR runtime candidate: %ls", c.c_str());
+-        if (Is64BitSteamVrManifest(c)) return c;
++        if (Is64BitOculusManifest(c)) return c;
+     }
+     return {};
+ }
+@@ -318,60 +331,73 @@ bool ProcessRunning(const wchar_t* exeName)
+     return found;
+ }
+ 
+-fs::path FindSteamVrRootFromManifest(const std::wstring& manifest)
++fs::path FindOculusSupportRootFromManifest(const std::wstring& manifest)
+ {
+     fs::path p(manifest);
+     for (fs::path cur = p.parent_path(); !cur.empty(); cur = cur.parent_path()) {
+-        if (Lower(cur.filename().wstring()) == L"steamvr") return cur;
++        if (Lower(cur.filename().wstring()) == L"support") return cur;
+         if (cur == cur.root_path()) break;
+     }
+     return {};
+ }
+ 
+-void AutoStartSteamVr(const std::wstring& manifest)
++void AutoStartMetaQuestLink(const std::wstring& manifest)
+ {
+-    if (!GetPrivateProfileIntW(L"VR", L"AutoStartSteamVR", 1, g_iniPath)) return;
+-    if (ProcessRunning(L"vrserver.exe") || ProcessRunning(L"vrmonitor.exe")) {
+-        HostLog("SteamVR: runtime processes already running.");
++    if (!GetPrivateProfileIntW(L"VR", L"AutoStartMetaQuestLink", 1, g_iniPath)) return;
++    if (ProcessRunning(L"OculusClient.exe")) {
++        HostLog("Meta Quest Link: OculusClient.exe is already running.");
+         return;
+     }
+ 
+-    fs::path root = FindSteamVrRootFromManifest(manifest);
+-    if (root.empty()) root = fs::path(ReadSteamPath()) / L"steamapps" / L"common" / L"SteamVR";
+-    fs::path startup = root / L"bin" / L"win64" / L"vrstartup.exe";
+-    if (!fs::exists(startup)) startup = root / L"bin" / L"win32" / L"vrstartup.exe";
+-    if (!fs::exists(startup)) {
+-        HostLog("SteamVR: vrstartup.exe not found under %ls; OpenXR runtime will be allowed to auto-start it.", root.c_str());
++    std::vector<fs::path> clients;
++    const fs::path support = FindOculusSupportRootFromManifest(manifest);
++    if (!support.empty()) clients.emplace_back(support / L"oculus-client" / L"OculusClient.exe");
++
++    std::wstring programFiles = ReadEnvironmentPath(L"ProgramW6432");
++    if (programFiles.empty()) programFiles = ReadEnvironmentPath(L"ProgramFiles");
++    if (!programFiles.empty()) {
++        clients.emplace_back(fs::path(programFiles) / L"Oculus" / L"Support" / L"oculus-client" / L"OculusClient.exe");
++        clients.emplace_back(fs::path(programFiles) / L"Meta Quest Link" / L"Support" / L"oculus-client" / L"OculusClient.exe");
++    }
++
++    fs::path client;
++    for (const auto& c : clients) {
++        std::error_code ec;
++        if (fs::exists(c, ec)) { client = c; break; }
++    }
++    if (client.empty()) {
++        HostLog("Meta Quest Link: OculusClient.exe was not found. Start the Meta Quest Link desktop app manually and connect Link/Air Link.");
+         return;
+     }
+ 
+-    std::wstring cmd = L"\"" + startup.wstring() + L"\"";
++    std::wstring cmd = L"\"" + client.wstring() + L"\"";
+     std::vector<wchar_t> mutableCmd(cmd.begin(), cmd.end());
+     mutableCmd.push_back(L'\0');
+     STARTUPINFOW si{};
+     si.cb = sizeof(si);
+     PROCESS_INFORMATION pi{};
+-    if (CreateProcessW(startup.c_str(), mutableCmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+-            nullptr, root.c_str(), &si, &pi)) {
+-        HostLog("SteamVR: started %ls pid=%lu", startup.c_str(), pi.dwProcessId);
++    if (CreateProcessW(client.c_str(), mutableCmd.data(), nullptr, nullptr, FALSE, 0,
++            nullptr, client.parent_path().c_str(), &si, &pi)) {
++        HostLog("Meta Quest Link: started %ls pid=%lu", client.c_str(), pi.dwProcessId);
+         CloseHandle(pi.hThread);
+         CloseHandle(pi.hProces
