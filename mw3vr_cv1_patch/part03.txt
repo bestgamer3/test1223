@@ -1,0 +1,56 @@
+us PC: OpenSCManager failed err=%lu", GetLastError());
++        return false;
++    }
++
++    SC_HANDLE service = OpenServiceW(scm, serviceName, SERVICE_QUERY_STATUS | SERVICE_START);
++    if (!service) {
++        HostLog("Oculus PC: OpenService(%ls) failed err=%lu", serviceName, GetLastError());
++        CloseServiceHandle(scm);
++        return false;
++    }
++
++    SERVICE_STATUS_PROCESS status{};
++    DWORD bytesNeeded = 0;
++    bool ok = QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO,
++        reinterpret_cast<LPBYTE>(&status), sizeof(status), &bytesNeeded) != FALSE;
++
++    if (ok && status.dwCurrentState == SERVICE_RUNNING) {
++        HostLog("Oculus PC: %ls is already running.", serviceName);
++        CloseServiceHandle(service);
++        CloseServiceHandle(scm);
++        return true;
++    }
++
++    if (ok && status.dwCurrentState == SERVICE_STOPPED) {
++        if (!StartServiceW(service, 0, nullptr)) {
++            const DWORD err = GetLastError();
++            if (err != ERROR_SERVICE_ALREADY_RUNNING) {
++                HostLog("Oculus PC: StartService(%ls) failed err=%lu", serviceName, err);
++            }
++        } else {
++            HostLog("Oculus PC: started Windows service %ls.", serviceName);
++        }
+     }
+ 
++    const ULONGLONG deadline = GetTickCount64() + timeoutMs;
++    do {
++        Sleep(250);
++        ZeroMemory(&status, sizeof(status));
++        if (QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO,
++                reinterpret_cast<LPBYTE>(&status), sizeof(status), &bytesNeeded)
++            && status.dwCurrentState == SERVICE_RUNNING) {
++            CloseServiceHandle(service);
++            CloseServiceHandle(scm);
++            return true;
++        }
++    } while (GetTickCount64() < deadline);
++
++    HostLog("Oculus PC: service %ls did not reach RUNNING state.", serviceName);
++    CloseServiceHandle(service);
++    CloseServiceHandle(scm);
++    return false;
++}
++
++fs::path FindOculusClient(const std::wstring& manifest)
++{
+     std
