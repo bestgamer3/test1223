@@ -1,0 +1,118 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index cd3c8d7..f3d1b48 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,5 +1,5 @@
+ cmake_minimum_required(VERSION 3.24)
+-project(MW3VR_OpenXR_ASI VERSION 0.1.1 LANGUAGES C CXX)
++project(MW3VR_OpenXR_ASI VERSION 0.1.2 LANGUAGES C CXX)
+ 
+ if(NOT WIN32)
+     message(FATAL_ERROR "MW3VR builds only on Windows.")
+@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD 17)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ set(CMAKE_CXX_EXTENSIONS OFF)
+ if(MSVC)
+-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
++    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+ endif()
+ 
+ include(FetchContent)
+diff --git a/README.md b/README.md
+index b7887b5..fd7e154 100644
+--- a/README.md
++++ b/README.md
+@@ -1,4 +1,4 @@
+-# MW3VR OpenXR Alpha 0.1b - ASI Loader build
++# MW3VR OpenXR Alpha 0.1c - ASI Loader build
+ 
+ This build changes the loader architecture to avoid direct custom D3D9-proxy startup issues.
+ 
+@@ -179,3 +179,12 @@ mw3vr.log
+ This repository contains no Activision game binaries or assets and does not bypass Steam ownership checks. You need your own legitimate installation.
+ 
+ This implementation is original code. It is informed by publicly documented IW5 reverse-engineering findings from **MW32011NCP** and by the architecture/features demonstrated by **CallOfDuty4_VR / KisakCOD-based VR**. See `THIRD_PARTY_NOTICES.md` for attribution and licenses.
++
++
++## Alpha 0.1c safety changes
++
++- Reads `mw3vr.ini` beside `plugins\MW3VR.asi` correctly.
++- Native IW5 memory writes are OFF by default.
++- Waits 5 seconds after D3D9 device creation before starting OpenXR.
++- Present/swap-chain fallback hooks are OFF by default; EndScene is primary.
++- SEH crash containment disables the VR callback instead of terminating MW3 when possible.
+diff --git a/mw3vr.ini b/mw3vr.ini
+index abc2197..acef688 100644
+--- a/mw3vr.ini
++++ b/mw3vr.ini
+@@ -1,6 +1,8 @@
+ [VR]
+ Enabled=1
+-NativeHeadTracking=1
++NativeHeadTracking=0
++; Safety default for alpha 0.1c: enable only after VR rendering is stable.
++; Set to 1 later to test native IW5 head-angle writes.
+ ; OpenXR is right-handed while IW5 mouse-look signs are opposite on the reference build.
+ HeadYawScale=-1.0
+ HeadPitchScale=-1.0
+@@ -9,6 +11,10 @@ MaxHeadDeltaDegrees=20.0
+ RecenterKey=0x77
+ ; Used to re-project MW3's mono backbuffer into the headset frustum.
+ GameHFovDegrees=90.0
++; Let MW3 finish early loading/device setup before OpenXR begins.
++StartupDelayMs=5000
++; EndScene is the primary hook. Extra Present hooks are disabled by default for stability.
++PresentFallbackHooks=0
+ ; If the executable hash is unknown, native memory writes remain disabled by default.
+ AllowUnknownExeNativeWrites=0
+ ; Required as well as AllowUnknownExeNativeWrites=1 for an unrecognized build.
+diff --git a/src/asi_entry.cpp b/src/asi_entry.cpp
+index 3765b7e..f59f4c0 100644
+--- a/src/asi_entry.cpp
++++ b/src/asi_entry.cpp
+@@ -117,7 +117,7 @@ BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID)
+         }
+ 
+         const bool patched = PatchMainExeD3D9IAT();
+-        Log::Write("MW3VR ASI alpha 0.1b loaded. D3D9 IAT hook=%d", patched ? 1 : 0);
++        Log::Write("MW3VR ASI alpha 0.1c loaded. D3D9 IAT hook=%d", patched ? 1 : 0);
+     } else if (reason == DLL_PROCESS_DETACH) {
+         Log::Write("MW3VR ASI detach.");
+         Log::Shutdown();
+diff --git a/src/config.cpp b/src/config.cpp
+index 53d18eb..84dfea9 100644
+--- a/src/config.cpp
++++ b/src/config.cpp
+@@ -43,25 +43,39 @@ uintptr_t ReadUIntPtrFlexible(const wchar_t* section, const wchar_t* key, uintpt
+ 
+ void LoadConfig()
+ {
+-    GetModuleFileNameW(nullptr, g_iniPath, MAX_PATH);
++    // Resolve the INI beside MW3VR.asi, not beside iw5sp.exe. The ASI package lives
++    // in plugins\, so using the host EXE path silently ignored the shipped config.
++    HMODULE self = nullptr;
++    if (!GetModuleHandleExW(
++            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
++            reinterpret_cast<LPCWSTR>(&LoadConfig),
++            &self) || !self) {
++        Log::Write("Config: failed to resolve MW3VR.asi module; using host directory fallback.");
++    }
++    GetModuleFileNameW(self, g_iniPath, MAX_PATH);
+     wchar_t* slash = wcsrchr(g_iniPath, L'\\');
+     if (slash) *(slash + 1) = L'\0';
+     wcscat_s(g_iniPath, L"mw3vr.ini");
+ 
+     g_config.enabled = GetPrivateProfileIntW(L"VR", L"Enabled", 1, g_iniPath) != 0;
+-    g_config.nativeHeadTracking = GetPrivateProfileIntW(L"VR", L"NativeHeadTracking", 1, g_iniPath) != 0;
++    g_config.nativeHeadTracking = GetPrivateProfileIntW(L"VR", L"NativeHeadTracking", 0, g_iniPath) != 0;
+     g_config.headYawScale = ReadFloat(L"VR", L"HeadYawScale", -1.0f);
+     g_config.headPitchScale = ReadFloat(L"VR", L"HeadPitchScale", -1.0f);
+     g_config.maxHeadDeltaDegrees = ReadFloat(L"VR", L"MaxHeadDeltaDegrees", 20.0f);
+     g_config.recenterKey = ReadIntFlexible(L"VR", L"RecenterKey", VK_F8);
+     g_config.gameHFovDegrees = ReadFloat(L"VR", L"GameHFovDegrees", 90.0f);
++    { const int delay = ReadIntFlexible(L"VR", L"StartupDelayMs", 5000); g_config.startupDelayMs = static_cast<uint32_t>(delay < 0 ? 0 : delay); }
++    g_config.presentFallbackHooks = GetPrivateProfileIntW(L"VR", L"PresentFallbackHooks", 0, g_iniPath) != 0;
+     g_config.allowUnknownExeNativeWrites = GetPrivateProfileIntW(L"VR", L"AllowUnknownExeNativeWrites", 0, g_iniPath) != 0;
+     g_config.unknownExeAngleAccumulatorRva = ReadUIntPtrFlexible(L"VR", L"UnknownExeAngleAccumulatorRva", 0);
+     g_config.logFrames = GetPrivateProfileIntW(L"Debug", L"LogFrames", 0, g_iniPath) != 0;
+ 
