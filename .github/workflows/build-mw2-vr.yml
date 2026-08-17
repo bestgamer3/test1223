@@ -9,6 +9,7 @@ on:
   issues:
     types: [opened]
 
+# MW2 VR build workflow
 jobs:
   build:
     runs-on: windows-2022
