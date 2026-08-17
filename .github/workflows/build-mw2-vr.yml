@@ -53,9 +53,25 @@ jobs:
           }
 
       - name: Build IW4x Win32 Release
-        shell: cmd
+        shell: powershell
         working-directory: iw4x-client
-        run: msbuild build\iw4x.slnx /m /p:Configuration=Release /p:Platform=Win32
+        run: |
+          $log = Join-Path $env:GITHUB_WORKSPACE 'msbuild.log'
+          & msbuild build\iw4x.slnx /m /p:Configuration=Release /p:Platform=Win32 /fl /flp:"logfile=$log;verbosity=normal"
+          $code = $LASTEXITCODE
+          if (Test-Path $log) {
+            Write-Host '=== FIRST MSBUILD ERRORS ==='
+            Select-String -Path $log -Pattern 'error C\d+|fatal error|error LNK\d+|error MSB\d+' | Select-Object -First 80 | ForEach-Object { Write-Host $_.Line }
+          }
+          exit $code
+
+      - name: Upload MSBuild log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iw4x-msbuild-log
+          path: msbuild.log
+          if-no-files-found: ignore
 
       - name: Collect compiled binaries
         shell: powershell
