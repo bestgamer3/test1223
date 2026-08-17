@@ -1,0 +1,49 @@
+name: Build MW3VR Alpha 0.1
+
+on:
+  push:
+    branches:
+      - mw3vr-build-alpha01
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct source archive
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem "mw3vr_build\source_part*.b64" | Sort-Object Name
+          if ($parts.Count -ne 6) { throw "Expected 6 source archive parts, found $($parts.Count)." }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ""
+          [IO.File]::WriteAllBytes("mw3vr_source.zip", [Convert]::FromBase64String($b64))
+          Expand-Archive -Path "mw3vr_source.zip" -DestinationPath "." -Force
+
+      - name: Configure Win32 Release
+        shell: cmd
+        run: cmake -S MW3VR_OpenXR -B build-mw3vr -A Win32
+
+      - name: Build MW3VR
+        shell: cmd
+        run: cmake --build build-mw3vr --config Release --target mw3vr
+
+      - name: Package build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          Copy-Item "build-mw3vr\bin\Release\d3d9.dll" "artifact\d3d9.dll"
+          Copy-Item "build-mw3vr\bin\Release\mw3vr.ini" "artifact\mw3vr.ini"
+          Copy-Item "MW3VR_OpenXR\README.md" "artifact\README.md"
+          Copy-Item "MW3VR_OpenXR\THIRD_PARTY_NOTICES.md" "artifact\THIRD_PARTY_NOTICES.md"
+          Get-FileHash "artifact\d3d9.dll" -Algorithm SHA256 | Format-List | Out-File "artifact\SHA256.txt"
+
+      - name: Upload MW3VR compiled package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MW3VR-OpenXR-Alpha01-Win32
+          path: artifact
+          if-no-files-found: error
