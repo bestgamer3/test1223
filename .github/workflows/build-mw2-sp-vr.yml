@@ -1,0 +1,64 @@
+name: Build MW2 Campaign VR Phase 1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-mw2-sp-vr.yml'
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout build repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Clone MW2 VR source
+        shell: cmd
+        run: git clone --depth 1 --branch mw2-vr-build https://github.com/bestgamer3/bestgamer3.git source
+
+      - name: Configure MW2 Campaign VR
+        shell: cmd
+        run: cmake -S source\sp_vr -B build -A x64
+
+      - name: Build MW2 Campaign VR
+        shell: cmd
+        run: cmake --build build --config Release --target MW2CampaignVR
+
+      - name: Collect compiled files
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          $exe = Get-ChildItem build -Recurse -Filter MW2CampaignVR.exe | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
+          $loader = Get-ChildItem $exe.Directory.FullName -Filter openxr_loader.dll | Select-Object -First 1
+          if (-not $exe) { throw 'MW2CampaignVR.exe not found after build' }
+          if (-not $loader) { throw 'openxr_loader.dll not found beside MW2CampaignVR.exe' }
+          Copy-Item $exe.FullName artifact\MW2CampaignVR.exe
+          Copy-Item $loader.FullName artifact\openxr_loader.dll
+          Copy-Item source\sp_vr\README.md artifact\README.md
+          @"
+          MW2 Campaign VR Phase 1
+          Targets Call of Duty: Modern Warfare 2 (2009) single-player: iw4sp.exe
+
+          Put MW2CampaignVR.exe and openxr_loader.dll beside iw4sp.exe.
+          Start your OpenXR headset runtime, then run MW2CampaignVR.exe.
+
+          F8  = recenter headset reference
+          F9  = toggle head-look
+          F12 = close VR companion
+
+          This Phase 1 build provides OpenXR head tracking + campaign FOV/head-look.
+          It does not render stereo eyes or motion controllers yet.
+          "@ | Set-Content artifact\QUICKSTART.txt
+
+      - name: Upload MW2 Campaign VR build
+        uses: actions/upload-artifact@v4
+        with:
+          name: MW2-Campaign-VR-Phase1-Win64
+          path: artifact
+          if-no-files-found: error
