@@ -1,0 +1,75 @@
+Manifest(path)) return false;
+     const std::wstring lib = ManifestLibraryPath(path);
+     if (!lib.empty() && FileExists(lib)) return IsPeMachine(lib, IMAGE_FILE_MACHINE_AMD64);
+     const std::wstring lp = Lower(path);
+-    return lp.find(L"win64") != std::wstring::npos || lp.find(L"x64") != std::wstring::npos || lp.find(L"64") != std::wstring::npos;
++    return lp.find(L"_64") != std::wstring::npos || lp.find(L"win64") != std::wstring::npos
++        || lp.find(L"x64") != std::wstring::npos || lp.find(L"64") != std::wstring::npos;
+ }
+ 
+ std::wstring ReadRegString(HKEY root, const wchar_t* subkey, const wchar_t* value, REGSAM extraFlags)
+@@ -255,49 +258,59 @@ void AddOpenXrRegistryCandidates(std::vector<std::wstring>& candidates)
+     }
+ }
+ 
+-std::wstring ReadSteamPath()
++std::wstring ReadEnvironmentPath(const wchar_t* name)
+ {
+-    std::wstring path = ReadRegString(HKEY_CURRENT_USER, L"Software\\Valve\\Steam", L"SteamPath", 0);
+-    if (!path.empty()) return path;
+-    path = ReadRegString(HKEY_CURRENT_USER, L"Software\\Valve\\Steam", L"SteamExe", 0);
+-    if (!path.empty()) return fs::path(path).parent_path().wstring();
+-    return L"C:\\Program Files (x86)\\Steam";
++    wchar_t value[2048] = {};
++    DWORD n = GetEnvironmentVariableW(name, value, _countof(value));
++    if (n == 0 || n >= _countof(value)) return {};
++    return value;
+ }
+ 
+-void SearchSteamVrJsons(const fs::path& root, std::vector<std::wstring>& candidates)
++void SearchOculusJsons(const fs::path& root, std::vector<std::wstring>& candidates)
+ {
+     std::error_code ec;
+     if (!fs::exists(root, ec)) return;
+     for (fs::recursive_directory_iterator it(root, fs::directory_options::skip_permission_denied, ec), end; it != end; it.increment(ec)) {
+         if (ec) { ec.clear(); continue; }
+-        if (it.depth() > 5) { it.disable_recursion_pending(); continue; }
++        if (it.depth() > 4) { it.disable_recursion_pending(); continue; }
+         if (!it->is_regular_file(ec)) continue;
+         const fs::path p = it->path();
+         if (Lower(p.extension().wstring()) != L".json") continue;
+         const std::wstring name = Lower(p.filename().wstring());
+-        if (name.find(L"xr") == std::wstring::npos && name.find(L"open") == std::wstring::npos && name.find(L"steam") == std::wstring::npos) continue;
+-        if (LooksLikeSteamVrManifest(p.wstring())) AddUnique(candidates, p.wstring());
++        if (name.find(L"xr") == std::wstring::npos && name.find(L"open") == std::wstring::npos
++            && name.find(L"oculus") == std::wstring::npos && name.find(L"meta") == std::wstring::npos) continue;
++        if (LooksLikeOculusManifest(p.wstring())) AddUnique(candidates, p.wstring());
+     }
+ }
+ 
+-std::wstring FindSteamVrRuntimeJson()
++std::wstring FindOculusRuntimeJson()
+ {
+     wchar_t manual[2048] = {};
+-    GetPrivateProfileStringW(L"VR", L"SteamVRRuntimeJson", L"", manual, _countof(manual), g_iniPath);
+-    if (manual[0] && Is64BitSteamVrManifest(manual)) {
+-        HostLog("OpenXR runtime: using manual SteamVRRuntimeJson=%ls", manual);
++    GetPrivateProfileStringW(L"VR", L"OculusRuntimeJson", L"", manual, _countof(manual), g_iniPath);
++    if (manual[0] && Is64BitOculusManifest(manual)) {
++        HostLog("OpenXR runtime: using manual OculusRuntimeJson=%ls", manual);
+         return manual;
+     }
+ 
+     std::vector<std::wstring> candidates;
+     AddOpenXrRegistryCandidates(candidates);
+ 
+-    const fs::path steamRoot(ReadSteamPath());
+-    SearchSteamVrJsons(steamRoot / L"steamapps" / L"common" / L"SteamVR", candidates);
++    std::vector<fs::path> roots;
++    std::wstring programFiles = ReadEnvironmentPath(L"ProgramW6432");
++    if (programFiles.empty()) programFiles = ReadEnvironmentPath(L"ProgramFiles");
++    if (!programFiles.empty()) {
++        roots.emplace_back(fs::path(programFiles) / L"Oculus" / L"Support" / L"oculus-runtime");
++        roots.emplace_back(fs::path(programFiles) / L"Meta Quest Link" / L"Support" / L"oculus-runtime");
++    }
++    // 
