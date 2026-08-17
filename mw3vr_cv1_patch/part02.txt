@@ -1,0 +1,53 @@
+OpenXR runtime used by other games.
++; Rift CV1 native Oculus PC OpenXR settings. This forces Oculus only for
++; MW3VRHost.exe and does not change the system-wide OpenXR runtime.
+ ForceOculusOpenXR=1
+-AutoStartMetaQuestLink=1
+-; Optional absolute path to the Meta/Oculus 64-bit runtime manifest.
+-; Leave blank for OpenXR registry + Meta Quest Link installation auto-detection.
++AutoStartOculusPC=1
++; How long to wait for OVRService / OVRServer_x64 and the CV1 HMD.
++CV1RuntimeWaitMs=15000
++; Optional absolute path to the Oculus PC 64-bit runtime manifest.
++; Legacy CV1 installs normally use:
++; C:\Program Files\Oculus\Support\oculus-runtime\oculus_openxr_64.json
+ OculusRuntimeJson=
+ 
+ AllowUnknownExeNativeWrites=0
+--- a/src/host_main.cpp
++++ b/src/host_main.cpp
+@@ -293,6 +293,10 @@
+     }
+ 
+     std::vector<std::wstring> candidates;
++
++    // Rift CV1 / legacy Oculus PC software default. Prefer this exact 64-bit
++    // manifest before generic registry candidates when it is installed.
++    AddUnique(candidates, L"C:\\Program Files\\Oculus\\Support\\oculus-runtime\\oculus_openxr_64.json");
+     AddOpenXrRegistryCandidates(candidates);
+ 
+     std::vector<fs::path> roots;
+@@ -341,14 +345,75 @@
+     return {};
+ }
+ 
+-void AutoStartMetaQuestLink(const std::wstring& manifest)
++bool WaitForProcess(const wchar_t* exeName, DWORD timeoutMs)
+ {
+-    if (!GetPrivateProfileIntW(L"VR", L"AutoStartMetaQuestLink", 1, g_iniPath)) return;
+-    if (ProcessRunning(L"OculusClient.exe")) {
+-        HostLog("Meta Quest Link: OculusClient.exe is already running.");
+-        return;
++    const ULONGLONG deadline = GetTickCount64() + timeoutMs;
++    do {
++        if (ProcessRunning(exeName)) return true;
++        Sleep(250);
++    } while (GetTickCount64() < deadline);
++    return ProcessRunning(exeName);
++}
++
++bool EnsureServiceRunning(const wchar_t* serviceName, DWORD timeoutMs)
++{
++    SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
++    if (!scm) {
++        HostLog("Ocul
