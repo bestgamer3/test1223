@@ -1,0 +1,29 @@
+GetD3D11GraphicsRequirementsKHR",
+             reinterpret_cast<PFN_xrVoidFunction*>(&m_getD3D11Req)), "xrGetInstanceProcAddr(xrGetD3D11GraphicsRequirementsKHR)")) return false;
+@@ -820,7 +934,7 @@
+                 bi.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+                 if (XrOk(xrBeginSession(m_session, &bi), "xrBeginSession")) {
+                     m_sessionRunning = true;
+-                    PublishStatus("Meta/Oculus OpenXR session running", 2);
++                    PublishStatus("Oculus Rift CV1 OpenXR session running", 2);
+                 }
+             } else if (m_sessionState == XR_SESSION_STATE_STOPPING && m_sessionRunning) {
+                 xrEndSession(m_session);
+@@ -893,7 +1007,7 @@
+ bool OpenXrHost::Initialize()
+ {
+     m_logFrames = GetPrivateProfileIntW(L"Debug", L"HostLogFrames", 0, g_iniPath) != 0;
+-    PublishStatus("Starting Meta/Oculus OpenXR host", 1);
++    PublishStatus("Starting Oculus Rift CV1 OpenXR host", 1);
+     if (!InitInstance() || !InitDeviceAndSession() || !CreateSwapchains() || !CreateBlitter()) {
+         HostLog("OpenXR host initialization failed; cleaning up for retry.");
+         Shutdown();
+@@ -1048,7 +1162,7 @@
+ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
+ {
+     InitHostPathsAndLog();
+-    HostLog("MW3VR Host alpha 0.2 starting (64-bit out-of-process OpenXR compositor). ini=%ls", g_iniPath);
++    HostLog("MW3VR Host alpha 0.2-CV1 starting (64-bit native Oculus PC OpenXR compositor). ini=%ls", g_iniPath);
+ 
+     const DWORD gamePid = ParsePid();
+     if (!gamePid) {
