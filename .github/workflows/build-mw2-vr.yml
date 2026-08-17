@@ -42,6 +42,16 @@ jobs:
         working-directory: iw4x-client
         run: call generate.bat
 
+      - name: Retarget IW4x projects to VS2022 toolset
+        shell: powershell
+        working-directory: iw4x-client
+        run: |
+          Get-ChildItem build -Filter *.vcxproj | ForEach-Object {
+            $text = Get-Content $_.FullName -Raw
+            $text = $text -replace '<PlatformToolset>v145</PlatformToolset>', '<PlatformToolset>v143</PlatformToolset>'
+            Set-Content -Path $_.FullName -Value $text -Encoding UTF8
+          }
+
       - name: Build IW4x Win32 Release
         shell: cmd
         working-directory: iw4x-client
