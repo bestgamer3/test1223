@@ -1,0 +1,80 @@
+diff --git a/README.md b/README.md
+index fd7e154..aeb21fb 100644
+--- a/README.md
++++ b/README.md
+@@ -1,13 +1,8 @@
+-# MW3VR OpenXR Alpha 0.1c - ASI Loader build
++# MW3VR OpenXR Alpha 0.2 Oculus/Meta runtime build
+ 
+-This build changes the loader architecture to avoid direct custom D3D9-proxy startup issues.
++This variant keeps OpenXR out of `iw5sp.exe`: the 32-bit ASI bridge captures MW3, while the separate 64-bit `MW3VRHost.exe` owns the OpenXR session. The host prefers the installed Meta/Oculus PC OpenXR runtime per-process using `XR_RUNTIME_JSON`, so SteamVR does not need to be the active runtime for this build.
+ 
+-Install beside `iw5sp.exe`:
+-- `d3d9.dll` = Ultimate ASI Loader (Win32)
+-- `plugins/MW3VR.asi` = MW3VR plugin
+-- `plugins/mw3vr.ini` = config
+-
+-The ASI plugin patches the main executable's imported `Direct3DCreate9` pointer, then installs the same D3D9 device/OpenXR hooks when MW3 creates Direct3D.
++For Quest Link/Air Link, start/connect Meta Quest Link before launching MW3 (the host can start the desktop client when found, but it cannot approve or enter Link mode inside the headset for you).
+ 
+ # MW3VR OpenXR — Call of Duty: Modern Warfare 3 (2011) Single-Player VR
+ 
+@@ -52,7 +47,7 @@ The current reference profile uses the module-relative location corresponding to
+ 
+ - Windows 10 or Windows 11.
+ - A legitimate PC installation of Call of Duty: Modern Warfare 3 (2011).
+-- An active OpenXR runtime (for example SteamVR, Meta Quest Link/Air Link OpenXR runtime, or another PC OpenXR runtime).
++- Meta Quest Link PC software with its OpenXR runtime installed, plus a Quest connected through Link or Air Link.
+ - Visual Studio 2022 with **Desktop development with C++** and CMake tools to build from source.
+ - Internet access on the first CMake configure if OpenXR-SDK is not already installed; CMake fetches Khronos OpenXR-SDK `release-1.1.61`.
+ 
+diff --git a/mw3vr.ini b/mw3vr.ini
+index b5752aa..0057e45 100644
+--- a/mw3vr.ini
++++ b/mw3vr.ini
+@@ -13,12 +13,13 @@ StartupDelayMs=2000
+ PresentFallbackHooks=0
+ BridgeCaptureHz=45
+ 
+-; Host OpenXR settings. SteamVR is forced per-process; this does not change
++; Host OpenXR settings. Meta/Oculus is forced per-process; this does not change
+ ; the system-wide OpenXR runtime used by other games.
+-ForceSteamVROpenXR=1
+-AutoStartSteamVR=1
+-; Optional absolute path. Leave blank for registry/Steam installation auto-detection.
+-SteamVRRuntimeJson=
++ForceOculusOpenXR=1
++AutoStartMetaQuestLink=1
++; Optional absolute path to the Meta/Oculus 64-bit runtime manifest.
++; Leave blank for OpenXR registry + Meta Quest Link installation auto-detection.
++OculusRuntimeJson=
+ 
+ AllowUnknownExeNativeWrites=0
+ UnknownExeAngleAccumulatorRva=0x00000000
+diff --git a/src/host_main.cpp b/src/host_main.cpp
+index 01390a5..4a2052a 100644
+--- a/src/host_main.cpp
++++ b/src/host_main.cpp
+@@ -190,22 +190,25 @@ bool IsPeMachine(const std::wstring& path, WORD expected)
+     return ok;
+ }
+ 
+-bool LooksLikeSteamVrManifest(const std::wstring& path)
++bool LooksLikeOculusManifest(const std::wstring& path)
+ {
+     const std::wstring lp = Lower(path);
+-    if (lp.find(L"steamxr") != std::wstring::npos || lp.find(L"steamvr") != std::wstring::npos) return true;
++    if (lp.find(L"oculus") != std::wstring::npos || lp.find(L"meta") != std::wstring::npos) return true;
+     const std::string text = LowerA(ReadFileBytes(path));
+     return text.find("\"runtime\"") != std::string::npos
+-        && (text.find("vrclient") != std::string::npos || text.find("steamvr") != std::string::npos || text.find("steamxr") != std::string::npos);
++        && (text.find("oculus") != std::string::npos
++            || text.find("libovrrt") != std::string::npos
++            || text.find("meta") != std::string::npos);
+ }
+ 
+-bool Is64BitSteamVrManifest(const std::wstring& path)
++bool Is64BitOculusManifest(const std::wstring& path)
+ {
+-    if (!FileExists(path) || !LooksLikeSteamVrManifest(path)) return false;
++    if (!FileExists(path) || !LooksLikeOculus
