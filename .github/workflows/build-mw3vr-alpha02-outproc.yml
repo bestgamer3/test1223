@@ -18,23 +18,37 @@ jobs:
         shell: pwsh
         run: |
           $paths = @(
-            "mw3vr_alpha02\source_part01.b64",
-            "mw3vr_alpha02\source_part02.b64",
-            "mw3vr_alpha02\source_part03.b64",
-            "mw3vr_alpha02\source_part04.b64",
-            "mw3vr_alpha02\source_part05.b64",
-            "mw3vr_alpha02\source_part06.b64",
-            "mw3vr_alpha02\source_part07.b64"
+            "mw3vr_alpha02_small\source_part01.b64",
+            "mw3vr_alpha02_small\source_part02.b64",
+            "mw3vr_alpha02_small\source_part03.b64",
+            "mw3vr_alpha02_small\source_part04.b64",
+            "mw3vr_alpha02_small\source_part05.b64",
+            "mw3vr_alpha02_small\source_part06.b64",
+            "mw3vr_alpha02_small\source_part07.b64",
+            "mw3vr_alpha02_small\source_part08.b64",
+            "mw3vr_alpha02_small\source_part09.b64",
+            "mw3vr_alpha02_small\source_part10.b64",
+            "mw3vr_alpha02_small\source_part11.b64",
+            "mw3vr_alpha02_small\source_part12.b64",
+            "mw3vr_alpha02_small\source_part13.b64",
+            "mw3vr_alpha02_small\source_part14.b64"
           )
-          $expectedLengths = @(8000,8000,8000,8000,8000,8000,5816)
+          $expectedLengths = @(4000,4000,4000,4000,4000,4000,4000,4000,4000,4000,4000,4000,4000,1816)
           $expectedHashes = @(
-            "8c2353914c4bc7d6528b1e1af12bd856be0c4915b39c0d954ba53681312eb9f4",
-            "1d459d7b634481121c87587a3bf81c0ae8090ed61e9c5a6f0ff17cf2cc6008c8",
-            "86f1c06dae53f1e1591bf11ae9ce4e4df9fb9e7a5a066f4f87ffd0ffcc0d2158",
-            "cb44845fb838559dd1aa294cae4d899d8efbbc63f7b3c25f0e10d22cbfd3cbf3",
-            "5c2852ead1b7c702964ec1e9da4287016e559f02d8e54d71ef51d75b21280afd",
-            "a78b9599359e39dc0f412d21403c93c377ba28ba1cdf8e6eb7ecde128ccab12a",
-            "58c1c2a5050113bf853f697fab83683c8018286d8750e30933c67374a49140db"
+            "97f4f719c98fc6112af4aff9c4d4188bd59f8e3487228ef49d7748bdacd280ba",
+            "307a561f64261720ebdf18343669c0c84811356e0985311bf40902bce2fb4d2e",
+            "a21232968e55937ff93627d178367b3e9ffd1006d110500ae3a0ef22d078221a",
+            "11235b9b74f47ba91045dbfe16d7171c11efef455d77c4701622f0e3171772d8",
+            "85e36428b70b79a3f3c3606d6be348a3f234ced3cadac685b13a807b14269f8a",
+            "71f41c628a5fb394840681980a64c1c87045d6b2b7a4b809fe6709d7c832a337",
+            "a3e02cc88adfd23ecd2a7d1227879345721be8e652bca426f3e2ff17a4597857",
+            "89b889281ae9db76d448f093f260741dec8a7291c5ccd8a93a71f9b0505a186e",
+            "226fb6c662de20483268ec24548fc73261bae3f7d9494c8d92e95bcfb40de5a8",
+            "65c02810003c5daccc045f78d52549bceb9dbd01c175ca4b059ad550750bd865",
+            "aef6d067954f19835371455373e3f1c3058942b257e616c99aa028a33afd08f4",
+            "7444238ffdd585d0e8011288bcd0cc693346184873de5d61088c1fc77e852a00",
+            "8487b97b1bfb4f5723a915fda1be4543fcd89e41f30978480a33be543854c224",
+            "d2aca5eb28979b323f98c07840f09a06236aaf629d0ff6c893ad9e03f9b525c4"
           )
           $chunks = @()
           for ($i = 0; $i -lt $paths.Count; $i++) {
