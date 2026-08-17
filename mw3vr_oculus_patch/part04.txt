@@ -1,0 +1,85 @@
+s);
++        Sleep(1500);
+     } else {
+-        HostLog("SteamVR: CreateProcess(vrstartup.exe) failed err=%lu", GetLastError());
++        HostLog("Meta Quest Link: CreateProcess(OculusClient.exe) failed err=%lu", GetLastError());
+     }
+ }
+ 
+-bool ForceSteamVrRuntime(std::wstring& selected)
++bool ForceOculusRuntime(std::wstring& selected)
+ {
+-    const bool force = GetPrivateProfileIntW(L"VR", L"ForceSteamVROpenXR", 1, g_iniPath) != 0;
++    const bool force = GetPrivateProfileIntW(L"VR", L"ForceOculusOpenXR", 1, g_iniPath) != 0;
+     if (!force) {
+-        HostLog("OpenXR runtime: ForceSteamVROpenXR=0; using system active runtime.");
++        HostLog("OpenXR runtime: ForceOculusOpenXR=0; using system active runtime.");
+         return true;
+     }
+ 
+-    selected = FindSteamVrRuntimeJson();
++    selected = FindOculusRuntimeJson();
+     if (selected.empty()) {
+-        HostLog("OpenXR runtime: SteamVR 64-bit runtime manifest was not found.");
++        HostLog("OpenXR runtime: Meta/Oculus 64-bit runtime manifest was not found.");
+         return false;
+     }
+ 
+@@ -379,8 +405,8 @@ bool ForceSteamVrRuntime(std::wstring& selected)
+         HostLog("OpenXR runtime: SetEnvironmentVariable(XR_RUNTIME_JSON) failed err=%lu", GetLastError());
+         return false;
+     }
+-    HostLog("OpenXR runtime: forced XR_RUNTIME_JSON=%ls", selected.c_str());
+-    AutoStartSteamVr(selected);
++    HostLog("OpenXR runtime: forced Meta/Oculus XR_RUNTIME_JSON=%ls", selected.c_str());
++    AutoStartMetaQuestLink(selected);
+     return true;
+ }
+ 
+@@ -527,8 +553,8 @@ void OpenXrHost::PublishStatus(const char* text, LONG code)
+ bool OpenXrHost::InitInstance()
+ {
+     std::wstring selected;
+-    if (!ForceSteamVrRuntime(selected)) {
+-        PublishStatus("SteamVR OpenXR runtime manifest not found", -10);
++    if (!ForceOculusRuntime(selected)) {
++        PublishStatus("Meta/Oculus OpenXR runtime manifest not found", -10);
+         return false;
+     }
+ 
+@@ -542,7 +568,7 @@ bool OpenXrHost::InitInstance()
+     for (const auto& e : exts) if (strcmp(e.extensionName, XR_KHR_D3D11_ENABLE_EXTENSION_NAME) == 0) d3d11 = true;
+     if (!d3d11) {
+         HostLog("OpenXR: selected runtime does not expose XR_KHR_D3D11_enable.");
+-        PublishStatus("SteamVR OpenXR lacks XR_KHR_D3D11_enable", -11);
++        PublishStatus("Meta/Oculus OpenXR lacks XR_KHR_D3D11_enable", -11);
+         return false;
+     }
+ 
+@@ -565,7 +591,7 @@ bool OpenXrHost::InitInstance()
+         Sleep(1000);
+     }
+     if (XR_FAILED(createResult)) {
+-        PublishStatus("xrCreateInstance failed for SteamVR", -12);
++        PublishStatus("xrCreateInstance failed for Meta/Oculus", -12);
+         return false;
+     }
+ 
+@@ -574,11 +600,11 @@ bool OpenXrHost::InitInstance()
+         HostLog("OpenXR: runtime='%s' version=%u.%u.%u", props.runtimeName,
+             static_cast<unsigned>(XR_VERSION_MAJOR(props.runtimeVersion)), static_cast<unsigned>(XR_VERSION_MINOR(props.runtimeVersion)), static_cast<unsigned>(XR_VERSION_PATCH(props.runtimeVersion)));
+         if (m_shared) strncpy_s(m_shared->runtimeName, props.runtimeName, _TRUNCATE);
+-        if (GetPrivateProfileIntW(L"VR", L"ForceSteamVROpenXR", 1, g_iniPath)) {
++        if (GetPrivateProfileIntW(L"VR", L"ForceOculusOpenXR", 1, g_iniPath)) {
+             const std::string runtimeLower = LowerA(props.runtimeName);
+-            if (runtimeLower.find("steam") == std::string::npos) {
+-                HostLog("OpenXR: forced runtime verification failed; runtime is not SteamVR.");
+-                PublishStatus("OpenXR runtime is not SteamVR", -13);
++            if (runtimeLower.find("oculus") == std::string::npos && runtimeLower.find("meta") == std::string::npos) {
++                HostLog("OpenXR: forced runtime verification failed; runtime is not Meta/Oculus.");
++                PublishStatus("OpenXR runtime is not Meta/Oculus", -13);
+                 return false;
+             }
+         }
+@@ -794,7 +820,7 @@ void OpenXrHost::PollEvents()
+      
