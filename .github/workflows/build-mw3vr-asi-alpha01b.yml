@@ -1,4 +1,4 @@
-name: Build MW3VR ASI Alpha 0.1b
+name: Build MW3VR ASI Alpha 0.1c
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct source archive
+      - name: Reconstruct Alpha 0.1b source
         shell: pwsh
         run: |
           $paths = @(
@@ -46,40 +46,31 @@ jobs:
           )
           $chunks = @()
           for ($i = 0; $i -lt $paths.Count; $i++) {
-            if (-not (Test-Path $paths[$i])) { throw "Missing source chunk $($paths[$i])." }
             $raw = (Get-Content $paths[$i] -Raw).Trim()
+            if ($raw.Length -ne $expectedLengths[$i]) { throw "Source chunk $($i+1) length mismatch." }
             $bytes = [Text.Encoding]::ASCII.GetBytes($raw)
             $sha = [Security.Cryptography.SHA256]::Create()
-            try {
-              $partHash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
-            } finally {
-              $sha.Dispose()
-            }
-            Write-Host "Part $($i+1): length=$($raw.Length) sha256=$partHash"
-            if ($raw.Length -ne $expectedLengths[$i] -or $partHash -ne $expectedHashes[$i]) {
-              throw "Source part $($i+1) integrity mismatch."
-            }
+            try { $partHash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant() } finally { $sha.Dispose() }
+            if ($partHash -ne $expectedHashes[$i]) { throw "Source chunk $($i+1) hash mismatch." }
             $chunks += $raw
           }
-          $b64 = $chunks -join ""
-          [IO.File]::WriteAllBytes("mw3vr_asi_source.zip", [Convert]::FromBase64String($b64))
-          $hash = (Get-FileHash "mw3vr_asi_source.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne "4385670a56ef20de84c632fe37f2d956414b3e2a1faa592cc81d6e19e2cb688e") {
-            throw "Source ZIP hash mismatch: $hash"
-          }
-          Expand-Archive -Path "mw3vr_asi_source.zip" -DestinationPath "." -Force
+          [IO.File]::WriteAllBytes("mw3vr_asi_source.zip", [Convert]::FromBase64String(($chunks -join "")))
+          $zipHash = (Get-FileHash "mw3vr_asi_source.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($zipHash -ne "4385670a56ef20de84c632fe37f2d956414b3e2a1faa592cc81d6e19e2cb688e") { throw "Source ZIP hash mismatch: $zipHash" }
+          Expand-Archive "mw3vr_asi_source.zip" "." -Force
 
-      - name: Align MSVC runtime with OpenXR loader
+      - name: Apply Alpha 0.1c crash-safety patch
         shell: pwsh
         run: |
-          $cmakePath = "MW3VR_ASI\CMakeLists.txt"
-          $text = Get-Content $cmakePath -Raw
-          $old = 'set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")'
-          $new = 'set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")'
-          if (-not $text.Contains($old)) { throw "Expected static MSVC runtime setting was not found." }
-          $text = $text.Replace($old, $new)
-          Set-Content -Path $cmakePath -Value $text -NoNewline
-          Write-Host "MW3VR now uses /MD in Release and /MDd in Debug to match OpenXR."
+          $patch = (Get-Content "mw3vr_alpha01c_patch_part1.txt" -Raw) + (Get-Content "mw3vr_alpha01c_patch_part2.txt" -Raw)
+          Set-Content "mw3vr_alpha01c.patch" -Value $patch -NoNewline
+          $patchHash = (Get-FileHash "mw3vr_alpha01c.patch" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($patchHash -ne "c94f4e2e16f1a6b8c226e8e9e3a5fcd62b06a6834ac63269105e45eb1dfa2395") { throw "Alpha 0.1c patch hash mismatch: $patchHash" }
+          Push-Location MW3VR_ASI
+          git apply "..\mw3vr_alpha01c.patch"
+          Pop-Location
+          Select-String -Path "MW3VR_ASI\src\asi_entry.cpp" -Pattern "alpha 0.1c" -Quiet | Out-Null
+          Select-String -Path "MW3VR_ASI\mw3vr.ini" -Pattern "NativeHeadTracking=0" -Quiet | Out-Null
 
       - name: Configure Win32 Release
         shell: cmd
@@ -93,57 +84,42 @@ jobs:
         shell: pwsh
         run: |
           Invoke-WebRequest "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/Win32-latest/d3d9-Win32.zip" -OutFile "d3d9-Win32.zip"
-          Expand-Archive -Path "d3d9-Win32.zip" -DestinationPath "ual" -Force
+          Expand-Archive "d3d9-Win32.zip" "ual" -Force
           $loader = Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1
-          if (-not $loader) { throw "Ultimate ASI Loader d3d9.dll was not found." }
-          Write-Host "Using ASI loader: $($loader.FullName)"
+          if (-not $loader) { throw "Ultimate ASI Loader d3d9.dll not found." }
 
       - name: Package build
         shell: pwsh
         run: |
           $asi = Get-ChildItem "build-mw3vr-asi" -Recurse -File -Filter "MW3VR.asi" | Select-Object -First 1
-          if (-not $asi) { throw "MW3VR.asi was not found after build." }
           $loader = Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1
-          if (-not $loader) { throw "d3d9.dll loader was not found." }
-
+          if (-not $asi -or -not $loader) { throw "Build output or ASI loader missing." }
           New-Item -ItemType Directory -Force "artifact\plugins" | Out-Null
           Copy-Item $loader.FullName "artifact\d3d9.dll"
           Copy-Item $asi.FullName "artifact\plugins\MW3VR.asi"
           Copy-Item "MW3VR_ASI\mw3vr.ini" "artifact\plugins\mw3vr.ini"
           Copy-Item "MW3VR_ASI\README.md" "artifact\README.md"
           Copy-Item "MW3VR_ASI\THIRD_PARTY_NOTICES.md" "artifact\THIRD_PARTY_NOTICES.md"
-
           @"
-          MW3VR OpenXR Alpha 0.1b - ASI Loader Build
+          MW3VR OpenXR Alpha 0.1c - crash-safety build
 
-          IMPORTANT: REMOVE the previous MW3VR custom d3d9.dll and root mw3vr.ini first.
-
-          Extract this package directly into the folder containing iw5sp.exe.
-
-          Expected layout:
+          Replace the Alpha 0.1b files with this package.
+          Keep the layout:
             iw5sp.exe
-            d3d9.dll              <- Ultimate ASI Loader (Win32)
-            plugins\MW3VR.asi     <- MW3VR plugin
-            plugins\mw3vr.ini    <- MW3VR config
+            d3d9.dll
+            plugins\MW3VR.asi
+            plugins\mw3vr.ini
 
-          Start Steam and your OpenXR runtime, then launch MW3 Single Player.
-
-          A successful early startup should create mw3vr.log beside iw5sp.exe with lines similar to:
-            ASI host: pid=... exe=...iw5sp.exe
-            ASI: patched iw5sp Direct3DCreate9 IAT ...
-            MW3VR ASI alpha 0.1b loaded. D3D9 IAT hook=1
-            ASI: Direct3DCreate9 intercepted ...
-
-          F8 recenters head orientation once OpenXR tracking is active.
-          Single-player only. Do not use this with multiplayer/anti-cheat clients.
+          Alpha 0.1c reads the INI from plugins correctly, starts with native memory writes OFF,
+          delays OpenXR startup 5 seconds, disables extra Present hooks by default, and traps
+          VR callback access violations so the game can continue and log the failure.
           "@ | Set-Content "artifact\QUICKSTART.txt"
-
           Get-FileHash "artifact\d3d9.dll" -Algorithm SHA256 | Out-File "artifact\SHA256.txt"
           Get-FileHash "artifact\plugins\MW3VR.asi" -Algorithm SHA256 | Out-File "artifact\SHA256.txt" -Append
 
       - name: Upload compiled package
         uses: actions/upload-artifact@v4
         with:
-          name: MW3VR-OpenXR-Alpha01b-ASI-Win32
+          name: MW3VR-OpenXR-Alpha01c-ASI-Win32
           path: artifact
           if-no-files-found: error
