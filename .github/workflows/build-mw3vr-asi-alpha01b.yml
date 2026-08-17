@@ -21,16 +21,28 @@ jobs:
             "mw3vr_asi\source_part1.b64",
             "mw3vr_asi\source_part2.b64",
             "mw3vr_asi\source_part3a.b64",
-            "mw3vr_asi\source_part3b.b64",
-            "mw3vr_asi\source_part3c.b64"
+            "mw3vr_asi\source_tail01.b64",
+            "mw3vr_asi\source_tail02.b64",
+            "mw3vr_asi\source_tail03.b64",
+            "mw3vr_asi\source_tail04.b64",
+            "mw3vr_asi\source_tail05.b64",
+            "mw3vr_asi\source_tail06.b64",
+            "mw3vr_asi\source_tail07.b64",
+            "mw3vr_asi\source_tail08.b64"
           )
-          $expectedLengths = @(13000, 13000, 4000, 4000, 3888)
+          $expectedLengths = @(13000, 13000, 4000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 888)
           $expectedHashes = @(
             "2cb85e415fa9e0d4c018b56651fa09cd7b09b6f8a266cf7f39963ebf23074aa9",
             "4648d887105b9f4b9ed498aba9454aeb1c725646f9179e3a52df9366bc617d23",
             "48dccd23dbbf8429d5016e600a1b652f329ea6f757bb63ae47eea5b2688716ee",
-            "ff4605090c61cfc4054eddecbaa741efe6b73097e80e798e9006782b02aa8204",
-            "2114279c6a472309d9d176021244153c207f8f37b63f44f8d1e5ff349e5b92c5"
+            "1433d7eb6675b9cfa7ccb966f1ee09a973c90e6583d975af94679ef7ae7df6db",
+            "2ebfb338da72f45fab4142ee805b71dbd039814b355a08e62967fc28124fb0ce",
+            "d8d900589cff192a8e4152b1dede2bbe600bc76a38f04efe38d1dce7770cb07e",
+            "6f1c35f61ab2bb0e1c8e6108052a9097ad69cbd6b99953cee72a8d3050db860b",
+            "c596e2972f1d28acf9c6b02c486b2e1ecaf84b7ec37ea5758bf139961f27bcb1",
+            "7aae389ac00de74eb74892bd3b13b0b3904741e164e65aca0e3c48451b024958",
+            "edd710de556011c81a6556935d50f8ce7a582784b9aab9339cff07d1ad3e5ed8",
+            "ccc64b28d384e0c4fc0c3d23d870e1124c9e3f552bb316143fca5d64a256a0ec"
           )
           $chunks = @()
           for ($i = 0; $i -lt $paths.Count; $i++) {
