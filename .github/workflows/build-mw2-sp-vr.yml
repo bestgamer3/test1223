@@ -1,4 +1,4 @@
-name: Build MW2 Campaign VR Phase 1
+name: Build MW2 Campaign VR Phase 2A
 
 on:
   workflow_dispatch:
@@ -42,23 +42,29 @@ jobs:
           Copy-Item $loader.FullName artifact\openxr_loader.dll
           Copy-Item source\sp_vr\README.md artifact\README.md
           @"
-          MW2 Campaign VR Phase 1
+          MW2 Campaign VR Phase 2A - Centered Eye Fix
           Targets Call of Duty: Modern Warfare 2 (2009) single-player: iw4sp.exe
 
           Put MW2CampaignVR.exe and openxr_loader.dll beside iw4sp.exe.
-          Start your OpenXR headset runtime, then run MW2CampaignVR.exe.
+          Start Steam and your OpenXR headset runtime, then run MW2CampaignVR.exe.
 
           F8  = recenter headset reference
           F9  = toggle head-look
+          F10 = toggle 6DoF translation
           F12 = close VR companion
 
-          This Phase 1 build provides OpenXR head tracking + campaign FOV/head-look.
-          It does not render stereo eyes or motion controllers yet.
+          Eye-centering fix:
+          - duplicated monoscopic image uses one shared HMD-center projection pose
+          - symmetric FOV is used in both eyes to remove false CV1 eye disparity
+          - source image is center-cropped instead of stretched into the eye texture
+
+          Phase 2A still duplicates one MW2 render into both eyes. True binocular
+          stereo requires the later IW4 per-eye renderer hook.
           "@ | Set-Content artifact\QUICKSTART.txt
 
       - name: Upload MW2 Campaign VR build
         uses: actions/upload-artifact@v4
         with:
-          name: MW2-Campaign-VR-Phase1-Win64
+          name: MW2-Campaign-VR-Phase2A-CenteredEyes-Win64
           path: artifact
           if-no-files-found: error
