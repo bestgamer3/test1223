@@ -69,6 +69,18 @@ jobs:
           }
           Expand-Archive -Path "mw3vr_asi_source.zip" -DestinationPath "." -Force
 
+      - name: Align MSVC runtime with OpenXR loader
+        shell: pwsh
+        run: |
+          $cmakePath = "MW3VR_ASI\CMakeLists.txt"
+          $text = Get-Content $cmakePath -Raw
+          $old = 'set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")'
+          $new = 'set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")'
+          if (-not $text.Contains($old)) { throw "Expected static MSVC runtime setting was not found." }
+          $text = $text.Replace($old, $new)
+          Set-Content -Path $cmakePath -Value $text -NoNewline
+          Write-Host "MW3VR now uses /MD in Release and /MDd in Debug to match OpenXR."
+
       - name: Configure Win32 Release
         shell: cmd
         run: cmake -S MW3VR_ASI -B build-mw3vr-asi -A Win32
