@@ -1,0 +1,46 @@
+
+-        PublishStatus("Meta/Oculus OpenXR lacks XR_KHR_D3D11_enable", -11);
++        PublishStatus("Oculus PC OpenXR lacks XR_KHR_D3D11_enable", -11);
+         return false;
+     }
+ 
+@@ -591,7 +691,7 @@
+         Sleep(1000);
+     }
+     if (XR_FAILED(createResult)) {
+-        PublishStatus("xrCreateInstance failed for Meta/Oculus", -12);
++        PublishStatus("xrCreateInstance failed for Oculus PC", -12);
+         return false;
+     }
+ 
+@@ -604,7 +704,7 @@
+             const std::string runtimeLower = LowerA(props.runtimeName);
+             if (runtimeLower.find("oculus") == std::string::npos && runtimeLower.find("meta") == std::string::npos) {
+                 HostLog("OpenXR: forced runtime verification failed; runtime is not Meta/Oculus.");
+-                PublishStatus("OpenXR runtime is not Meta/Oculus", -13);
++                PublishStatus("OpenXR runtime is not Oculus/Meta", -13);
+                 return false;
+             }
+         }
+@@ -612,7 +712,21 @@
+ 
+     XrSystemGetInfo sgi{XR_TYPE_SYSTEM_GET_INFO};
+     sgi.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+-    if (!XrOk(xrGetSystem(m_instance, &sgi, &m_systemId), "xrGetSystem(HMD)")) return false;
++    XrResult systemResult = XR_ERROR_FORM_FACTOR_UNAVAILABLE;
++    for (int attempt = 1; attempt <= 30; ++attempt) {
++        systemResult = xrGetSystem(m_instance, &sgi, &m_systemId);
++        if (XR_SUCCEEDED(systemResult)) break;
++        HostLog("Oculus CV1: xrGetSystem(HMD) attempt %d/30 failed result=%d; waiting for headset/runtime.",
++            attempt, static_cast<int>(systemResult));
++        Sleep(500);
++    }
++    if (XR_FAILED(systemResult)) {
++        HostLog("OpenXR: xrGetSystem(HMD) failed after CV1 readiness wait, XrResult=%d",
++            static_cast<int>(systemResult));
++        PublishStatus("Oculus CV1 HMD not available to OpenXR", -14);
++        return false;
++    }
++    HostLog("Oculus CV1: OpenXR HMD system acquired.");
+ 
+     if (!XrOk(xrGetInstanceProcAddr(m_instance, "xr
