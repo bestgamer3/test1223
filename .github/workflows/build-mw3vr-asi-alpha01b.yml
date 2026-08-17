@@ -63,6 +63,7 @@ jobs:
         shell: pwsh
         run: |
           $patch = (Get-Content "mw3vr_alpha01c_patch_part1.txt" -Raw) + (Get-Content "mw3vr_alpha01c_patch_part2.txt" -Raw)
+          $patch = $patch.Replace("`r`n", "`n")
           Set-Content "mw3vr_alpha01c.patch" -Value $patch -NoNewline
           $patchHash = (Get-FileHash "mw3vr_alpha01c.patch" -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($patchHash -ne "c94f4e2e16f1a6b8c226e8e9e3a5fcd62b06a6834ac63269105e45eb1dfa2395") { throw "Alpha 0.1c patch hash mismatch: $patchHash" }
