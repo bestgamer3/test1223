@@ -53,9 +53,7 @@ jobs:
           [IO.File]::WriteAllBytes("MW3VR_alpha02_outproc_source.zip", [Convert]::FromBase64String($b64))
           $zipHash = (Get-FileHash "MW3VR_alpha02_outproc_source.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "Source ZIP sha256=$zipHash"
-          if ($zipHash -ne "10e7b0541e14f7fe4d4a2ff399d8672f4cb068053362a625e0657abfa4554e0c") {
-            throw "Source ZIP hash mismatch"
-          }
+          if ($zipHash -ne "10e7b0541e14f7fe4d4a2ff399d8672f4cb068053362a625e0657abfa4554e0c") { throw "Source ZIP hash mismatch" }
           Expand-Archive "MW3VR_alpha02_outproc_source.zip" "." -Force
           if (-not (Test-Path "MW3VR_alpha02_outproc\src\host_main.cpp")) { throw "Host source missing after extraction" }
 
@@ -86,11 +84,6 @@ jobs:
           $host = Get-ChildItem "build-host" -Recurse -File -Filter "MW3VRHost.exe" | Select-Object -First 1
           if (-not $asi) { throw "MW3VR.asi not found" }
           if (-not $host) { throw "MW3VRHost.exe not found" }
-          $dumpbin = (Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -Recurse -File -Filter dumpbin.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1).FullName
-          if ($dumpbin) {
-            & $dumpbin /headers $asi.FullName | Select-String "machine"
-            & $dumpbin /headers $host.FullName | Select-String "machine"
-          }
           Write-Host "ASI: $($asi.FullName)"
           Write-Host "Host: $($host.FullName)"
 
@@ -109,43 +102,36 @@ jobs:
           $host = Get-ChildItem "build-host" -Recurse -File -Filter "MW3VRHost.exe" | Select-Object -First 1
           $loader = Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1
           if (-not $asi -or -not $host -or -not $loader) { throw "One or more package binaries missing" }
-
           New-Item -ItemType Directory -Force "artifact\plugins" | Out-Null
           Copy-Item $loader.FullName "artifact\d3d9.dll"
           Copy-Item $host.FullName "artifact\MW3VRHost.exe"
           Copy-Item $asi.FullName "artifact\plugins\MW3VR.asi"
           Copy-Item "MW3VR_alpha02_outproc\mw3vr.ini" "artifact\plugins\mw3vr.ini"
           Copy-Item "MW3VR_alpha02_outproc\THIRD_PARTY_NOTICES.md" "artifact\THIRD_PARTY_NOTICES.md"
-
-          @"
-MW3VR OpenXR Alpha 0.2 - Out-of-Process SteamVR Build
-
-IMPORTANT: Remove/replace all Alpha 0.1b/0.1c MW3VR files first.
-
-Install directly beside iw5sp.exe:
-  iw5sp.exe
-  d3d9.dll                 <- Ultimate ASI Loader Win32
-  MW3VRHost.exe            <- 64-bit OpenXR/SteamVR host
-  plugins\MW3VR.asi        <- 32-bit MW3 D3D9 capture bridge
-  plugins\mw3vr.ini
-
-Architecture change:
-- iw5sp.exe no longer loads the OpenXR loader.
-- MW3VR.asi only captures the D3D9 backbuffer into shared memory.
-- MW3VRHost.exe is the real 64-bit OpenXR application submitted to SteamVR.
-- With ForceSteamVROpenXR=1 the host uses SteamVR's OpenXR runtime for this process only.
-
-Launch MW3 Single Player normally. The ASI plugin starts MW3VRHost.exe automatically.
-SteamVR should be started automatically when AutoStartSteamVR=1, or you can start it first.
-
-Logs:
-  mw3vr.log       = 32-bit game/bridge log
-  mw3vr_host.log  = 64-bit OpenXR host log
-
-This alpha still duplicates the same MW3 camera image to both eyes. It is not true stereo yet.
-Native MW3 head-memory writes remain OFF by default.
-"@ | Set-Content "artifact\QUICKSTART.txt"
-
+          $quick = @(
+            "MW3VR OpenXR Alpha 0.2 - Out-of-Process SteamVR Build",
+            "",
+            "IMPORTANT: Remove/replace all Alpha 0.1b/0.1c MW3VR files first.",
+            "",
+            "Install directly beside iw5sp.exe:",
+            "  iw5sp.exe",
+            "  d3d9.dll                 <- Ultimate ASI Loader Win32",
+            "  MW3VRHost.exe            <- 64-bit OpenXR/SteamVR host",
+            "  plugins\MW3VR.asi        <- 32-bit MW3 D3D9 capture bridge",
+            "  plugins\mw3vr.ini",
+            "",
+            "iw5sp.exe no longer loads OpenXR. The 64-bit host is the real OpenXR application.",
+            "ForceSteamVROpenXR=1 applies SteamVR only to MW3VRHost.exe, not system-wide.",
+            "Launch MW3 Single Player normally; the plugin starts MW3VRHost.exe automatically.",
+            "",
+            "Logs:",
+            "  mw3vr.log       = game/bridge log",
+            "  mw3vr_host.log  = SteamVR/OpenXR host log",
+            "",
+            "Alpha limitation: the same MW3 camera image is currently submitted to both eyes; true stereo is not implemented yet.",
+            "Native MW3 head-memory writes remain OFF by default."
+          )
+          $quick | Set-Content "artifact\QUICKSTART.txt"
           Get-FileHash "artifact\d3d9.dll" -Algorithm SHA256 | Out-File "artifact\SHA256.txt"
           Get-FileHash "artifact\MW3VRHost.exe" -Algorithm SHA256 | Out-File "artifact\SHA256.txt" -Append
           Get-FileHash "artifact\plugins\MW3VR.asi" -Algorithm SHA256 | Out-File "artifact\SHA256.txt" -Append
