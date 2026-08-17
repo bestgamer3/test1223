@@ -14,92 +14,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct and verify Alpha 0.2 source
+      - name: Reconstruct verified Alpha 0.2 source
         shell: pwsh
         run: |
-          $paths = @(
-            "mw3vr_alpha02_small\source_part01.b64",
-            "mw3vr_alpha02_small\source_part02.b64",
-            "mw3vr_alpha02_small\source_part03.b64",
-            "mw3vr_alpha02_small\source_part04.b64",
-            "mw3vr_alpha02_small\source_part05.b64",
-            "mw3vr_alpha02_small\source_part06.b64",
-            "mw3vr_alpha02_small\source_part07.b64",
-            "mw3vr_alpha02_small\source_part08.b64",
-            "mw3vr_alpha02_small\source_part09.b64",
-            "mw3vr_alpha02_small\source_part10.b64",
-            "mw3vr_alpha02_small\source_part11.b64",
-            "mw3vr_alpha02_small\source_part12.b64",
-            "mw3vr_alpha02_small\source_part13.b64",
-            "mw3vr_alpha02_small\source_part14.b64"
-          )
-          $expectedLengths = @(4000,4000,4000,4000,4000,4000,4000,4000,4000,4000,4000,4000,4000,1816)
-          $expectedHashes = @(
-            "97f4f719c98fc6112af4aff9c4d4188bd59f8e3487228ef49d7748bdacd280ba",
-            "307a561f64261720ebdf18343669c0c84811356e0985311bf40902bce2fb4d2e",
-            "a21232968e55937ff93627d178367b3e9ffd1006d110500ae3a0ef22d078221a",
-            "11235b9b74f47ba91045dbfe16d7171c11efef455d77c4701622f0e3171772d8",
-            "85e36428b70b79a3f3c3606d6be348a3f234ced3cadac685b13a807b14269f8a",
-            "71f41c628a5fb394840681980a64c1c87045d6b2b7a4b809fe6709d7c832a337",
-            "a3e02cc88adfd23ecd2a7d1227879345721be8e652bca426f3e2ff17a4597857",
-            "89b889281ae9db76d448f093f260741dec8a7291c5ccd8a93a71f9b0505a186e",
-            "226fb6c662de20483268ec24548fc73261bae3f7d9494c8d92e95bcfb40de5a8",
-            "65c02810003c5daccc045f78d52549bceb9dbd01c175ca4b059ad550750bd865",
-            "aef6d067954f19835371455373e3f1c3058942b257e616c99aa028a33afd08f4",
-            "7444238ffdd585d0e8011288bcd0cc693346184873de5d61088c1fc77e852a00",
-            "8487b97b1bfb4f5723a915fda1be4543fcd89e41f30978480a33be543854c224",
-            "d2aca5eb28979b323f98c07840f09a06236aaf629d0ff6c893ad9e03f9b525c4"
-          )
-          $chunks = @()
-          for ($i = 0; $i -lt $paths.Count; $i++) {
-            $raw = (Get-Content $paths[$i] -Raw).Trim()
-            $bytes = [Text.Encoding]::ASCII.GetBytes($raw)
-            $sha = [Security.Cryptography.SHA256]::Create()
-            try { $hash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-","").ToLowerInvariant() }
-            finally { $sha.Dispose() }
-            if ($raw.Length -ne $expectedLengths[$i]) { throw "Source chunk $($i+1) length mismatch" }
-            if ($hash -ne $expectedHashes[$i]) { throw "Source chunk $($i+1) hash mismatch" }
-            $chunks += $raw
-          }
-          [IO.File]::WriteAllBytes("MW3VR_alpha02_outproc_source.zip", [Convert]::FromBase64String(($chunks -join "")))
-          $zipHash = (Get-FileHash "MW3VR_alpha02_outproc_source.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($zipHash -ne "10e7b0541e14f7fe4d4a2ff399d8672f4cb068053362a625e0657abfa4554e0c") { throw "Source ZIP hash mismatch: $zipHash" }
+          $paths = 1..14 | ForEach-Object { "mw3vr_alpha02_small\source_part{0:D2}.b64" -f $_ }
+          $b64 = ($paths | ForEach-Object { (Get-Content $_ -Raw).Trim() }) -join ""
+          [IO.File]::WriteAllBytes("MW3VR_alpha02_outproc_source.zip", [Convert]::FromBase64String($b64))
+          $hash = (Get-FileHash "MW3VR_alpha02_outproc_source.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne "10e7b0541e14f7fe4d4a2ff399d8672f4cb068053362a625e0657abfa4554e0c") { throw "Source ZIP hash mismatch: $hash" }
           Expand-Archive "MW3VR_alpha02_outproc_source.zip" "." -Force
 
-      - name: Apply Meta Oculus OpenXR patch
+      - name: Apply verified Meta Oculus OpenXR patch
         shell: pwsh
         run: |
-          $patchPaths = @(
-            "mw3vr_oculus_patch\part01.txt",
-            "mw3vr_oculus_patch\part02.txt",
-            "mw3vr_oculus_patch\part03.txt",
-            "mw3vr_oculus_patch\part04.txt",
-            "mw3vr_oculus_patch\part05.txt"
-          )
-          $expectedLengths = @(4000,4000,4000,4000,1051)
-          $expectedHashes = @(
-            "3be9a37d3d2a397a049ec08379a2f0ad2d788b24591515e27b47ce8df2b1ed88",
-            "1a3e05c23ecc07819ecf9bf6a004bb9a6988f37cc2dd1338ca7abc7e3386f53e",
-            "7bb92187f9f6d4293059597a0178e83ea1809f0eb841ecb69c145683c5f0e2dd",
-            "20a352185f0a8975fa39a976237578dea87b60c32efca35afb631f420da5e2e0",
-            "ce5ab658518c63e5c77d3c1a618dd2c1ff4e220acd3b1afc36ed18fabdb5e25a"
-          )
+          $paths = 1..5 | ForEach-Object { "mw3vr_oculus_patch\part{0:D2}.txt" -f $_ }
           $parts = @()
-          for ($i = 0; $i -lt $patchPaths.Count; $i++) {
-            $raw = Get-Content $patchPaths[$i] -Raw
-            $raw = $raw.Replace("`r`n", "`n")
-            if ($raw.Length -ne $expectedLengths[$i]) { throw "Patch chunk $($i+1) length mismatch: $($raw.Length)" }
-            $bytes = [Text.Encoding]::UTF8.GetBytes($raw)
-            $sha = [Security.Cryptography.SHA256]::Create()
-            try { $hash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-","").ToLowerInvariant() }
-            finally { $sha.Dispose() }
-            if ($hash -ne $expectedHashes[$i]) { throw "Patch chunk $($i+1) hash mismatch: $hash" }
+          for ($i = 0; $i -lt $paths.Count; $i++) {
+            $raw = (Get-Content $paths[$i] -Raw).Replace("`r`n", "`n")
+            $raw = $raw.TrimEnd("`r", "`n")
+            if ($i -eq $paths.Count - 1) { $raw += "`n" }
             $parts += $raw
           }
           $patch = $parts -join ""
           [IO.File]::WriteAllText("mw3vr_alpha02_oculus.patch", $patch, [Text.UTF8Encoding]::new($false))
-          $patchHash = (Get-FileHash "mw3vr_alpha02_oculus.patch" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($patchHash -ne "fe7bdc96d323e7705b1521b564098e3ebfd7662db7789439ceabffe96f17eaed") { throw "Oculus patch hash mismatch: $patchHash" }
+          $hash = (Get-FileHash "mw3vr_alpha02_oculus.patch" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne "fe7bdc96d323e7705b1521b564098e3ebfd7662db7789439ceabffe96f17eaed") { throw "Oculus patch hash mismatch: $hash" }
           git apply --check --directory=MW3VR_alpha02_outproc mw3vr_alpha02_oculus.patch
           if ($LASTEXITCODE -ne 0) { throw "Oculus patch check failed" }
           git apply --directory=MW3VR_alpha02_outproc mw3vr_alpha02_oculus.patch
@@ -132,8 +71,7 @@ jobs:
         run: |
           Invoke-WebRequest "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/Win32-latest/d3d9-Win32.zip" -OutFile "d3d9-Win32.zip"
           Expand-Archive "d3d9-Win32.zip" "ual" -Force
-          $loader = Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1
-          if (-not $loader) { throw "Ultimate ASI Loader d3d9.dll not found" }
+          if (-not (Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1)) { throw "ASI loader not found" }
 
       - name: Package Oculus Alpha 0.2
         shell: pwsh
@@ -149,30 +87,21 @@ jobs:
           Copy-Item "MW3VR_alpha02_outproc\mw3vr.ini" "artifact\plugins\mw3vr.ini"
           Copy-Item "MW3VR_alpha02_outproc\README.md" "artifact\README.md"
           Copy-Item "MW3VR_alpha02_outproc\THIRD_PARTY_NOTICES.md" "artifact\THIRD_PARTY_NOTICES.md"
-          $quick = @(
+          @(
             "MW3VR OpenXR Alpha 0.2 - Meta/Oculus Primary Runtime Build",
             "",
             "Remove/replace the previous SteamVR Alpha 0.2 MW3VR files first.",
-            "",
-            "Install beside iw5sp.exe:",
-            "  d3d9.dll",
-            "  MW3VRHost.exe",
-            "  plugins\MW3VR.asi",
-            "  plugins\mw3vr.ini",
+            "Start and connect Meta Quest Link or Air Link, then launch MW3 Single Player.",
             "",
             "Default runtime settings:",
             "  ForceOculusOpenXR=1",
             "  AutoStartMetaQuestLink=1",
             "  OculusRuntimeJson=",
             "",
-            "Start/connect Meta Quest Link or Air Link, then launch MW3 Single Player normally.",
-            "The 64-bit host forces the installed Meta/Oculus OpenXR runtime for MW3VRHost.exe only.",
-            "It does not change the Windows-wide OpenXR runtime.",
-            "",
+            "The x64 MW3VRHost.exe forces the installed Meta/Oculus OpenXR runtime for this process only.",
             "Logs: mw3vr.log and mw3vr_host.log",
             "Alpha limitation: the same MW3 camera image is submitted to both eyes; true stereo is not implemented yet."
-          )
-          $quick | Set-Content "artifact\QUICKSTART.txt"
+          ) | Set-Content "artifact\QUICKSTART.txt"
           Get-FileHash "artifact\d3d9.dll" -Algorithm SHA256 | Out-File "artifact\SHA256.txt"
           Get-FileHash "artifact\MW3VRHost.exe" -Algorithm SHA256 | Out-File "artifact\SHA256.txt" -Append
           Get-FileHash "artifact\plugins\MW3VR.asi" -Algorithm SHA256 | Out-File "artifact\SHA256.txt" -Append
