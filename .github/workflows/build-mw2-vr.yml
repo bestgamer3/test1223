@@ -45,7 +45,7 @@ jobs:
       - name: Build IW4x Win32 Release
         shell: cmd
         working-directory: iw4x-client
-        run: msbuild build\iw4x.sln /m /p:Configuration=Release /p:Platform=Win32
+        run: msbuild build\iw4x.slnx /m /p:Configuration=Release /p:Platform=Win32
 
       - name: Collect compiled binaries
         shell: powershell
