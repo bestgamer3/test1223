@@ -1,4 +1,4 @@
-name: Build MW2 Campaign VR Phase 3D Final All-Viewmodel Hook
+name: Build MW2 Campaign VR Phase 3E Weapon-Only Viewmodel
 
 on:
   workflow_dispatch:
@@ -30,11 +30,11 @@ jobs:
         shell: cmd
         run: cmake --build build64 --config Release --target MW2CampaignVR
 
-      - name: Configure Win32 final viewmodel hook
+      - name: Configure Win32 weapon-only viewmodel hook
         shell: cmd
         run: cmake -S source\sp_vr\viewmodel_hook -B build32hook -A Win32
 
-      - name: Build Win32 final viewmodel hook
+      - name: Build Win32 weapon-only viewmodel hook
         shell: cmd
         run: cmake --build build32hook --config Release --target MW2VRViewmodelHook
 
@@ -76,6 +76,7 @@ jobs:
           Copy-Item source\sp_vr\src\VRViewmodelBridge.cpp artifact\ViewmodelSource\VRViewmodelBridge.cpp
           Copy-Item source\sp_vr\viewmodel_hook\MW2VRFinalViewmodelPlacement.cpp artifact\ViewmodelSource\MW2VRFinalViewmodelPlacement.cpp
           Copy-Item source\sp_vr\viewmodel_hook\MW2VRLiveHook.cpp artifact\ViewmodelSource\MW2VRLiveHook.cpp
+          Copy-Item source\sp_vr\viewmodel_hook\MW2VRHandsFilter.cpp artifact\ViewmodelSource\MW2VRHandsFilter.cpp
           Copy-Item source\sp_vr\viewmodel_hook\MW2VRViewmodelHook.def artifact\ViewmodelSource\MW2VRViewmodelHook.def
           Copy-Item source\sp_vr\hook_loader\MW2VRHookLoader.cpp artifact\ViewmodelSource\MW2VRHookLoader.cpp
 
@@ -86,48 +87,45 @@ jobs:
           MW2VRHookLoader.exe
           if errorlevel 1 (
             echo.
-            echo The live viewmodel hook did not install.
+            echo The weapon-only VR viewmodel hooks did not install.
             echo Check MW2VRViewmodelHook.log in this folder.
             pause
           )
           "@ | Set-Content artifact\START_MW2_VR_WITH_WEAPON_HOOK.bat
 
           @"
-          MW2 Campaign VR Phase 3D - FINAL GLOBAL VR VIEWMODEL HOOK
+          MW2 Campaign VR Phase 3E - WEAPON-ONLY VR VIEWMODEL
           Targets Call of Duty: Modern Warfare 2 (2009) single-player iw4sp.exe only.
 
           QUICK START
           1. Put all files beside your legitimate Steam iw4sp.exe.
           2. Start the Oculus/Meta OpenXR runtime and connect the Rift CV1 + Touch controllers.
-          3. Run START_MW2_VR_WITH_WEAPON_HOOK.bat.
-          4. The x64 companion starts/attaches to MW2 and publishes controller tracking.
-          5. The Win32 loader loads MW2VRViewmodelHook.dll and installs the verified single-player viewmodel call hook.
+          3. Fully restart MW2 before testing this build; do not inject it over an older Phase 3D session.
+          4. Run START_MW2_VR_WITH_WEAPON_HOOK.bat.
+          5. The loader installs the hand/arm filter FIRST, then the tracked weapon-placement hook.
 
-          WHAT THIS FINAL HOOK DOES
-          - Hooks the shared first-person CG_AddViewWeapon -> CG_AddPlayerWeapon submission path, not individual weapon files.
-          - Therefore every normal first-person viewmodel that passes through that MW2 path is routed through the VR controller transform: rifles, pistols, SMGs, LMGs, shotguns, sniper rifles, launchers and scripted variants that use the same viewmodel submission.
-          - Keeps MW2's original weapon DObj/models, reloads, firing animations, bolt/magazine animation and effects. The final root pose is replaced by our tracked VR root instead of replacing proprietary game assets.
-          - Learns separate attachment profiles as MW2 changes to a genuinely different stock viewmodel root, so the first gun's cached root is not reused forever.
-          - Reuses a learned profile when a sufficiently matching viewmodel root returns.
-          - Filters short recoil/root spikes and excludes ADS from gradual weapon-profile learning because ADS already uses the explicit shouldered VR blend.
-          - Left squeeze still provides two-hand support orientation from the tracked left Touch controller.
+          WHAT CHANGED FROM PHASE 3D
+          - Phase 3D moved MW2's entire flat-screen first-person rig, including the canned two-hand pose.
+          - Phase 3E inspects the actual first-person weapon DObj and identifies attached hand/arm XModels by model name.
+          - It validates every model pointer and verifies that the sum of submodel bone counts exactly matches the DObj bone count before changing anything.
+          - It hides only the bone ranges belonging to hand/arm/glove submodels by OR-ing those bits into IW4's existing hidePartBits mask.
+          - The weapon submodel stays visible and continues using MW2's normal firing, reload, magazine, bolt, scope and attachment animation data.
+          - The remaining weapon root is still driven by the right Touch controller through the existing Phase 3D placement solver.
+          - F5 disabling physical viewmodel publishing restores the saved stock hide mask when that DObj is next processed.
 
-          SAFE RETAIL-SP LOCATOR
-          - No multiplayer function address is hard-coded.
-          - The DLL locates cg_drawGun plus cg_gun_x/y/z through their runtime dvar registration references.
-          - It finds the code region reading all four dvars, matching the single-player CG_AddViewWeapon path.
-          - It requires exactly one relative CALL with five cdecl arguments (20-byte caller cleanup) after the gun-offset code.
-          - Only that validated call is redirected. If validation is ambiguous, the DLL refuses to patch and leaves stock code untouched.
-          - Camera origin/axis use the same high-confidence refdef structural validation used by the existing 6DoF code.
+          INSTALL ORDER / SAFETY
+          - The hand filter is installed before the outer CG_AddPlayerWeapon placement hook so it can inspect the unmodified first-person function.
+          - No multiplayer address is hard-coded.
+          - The outer call is still located through cg_drawGun plus cg_gun_x/y/z runtime references.
+          - The inner DObj getter is selected only from two-argument cdecl calls inside that verified first-person function.
+          - Even after interception, no DObj memory is modified unless the returned pointer passes strict layout, memory, model-name and total-bone validation and contains both a hand-like model and a non-hand weapon model.
+          - Validation failure leaves the stock viewmodel untouched and writes diagnostics to MW2VRViewmodelHook.log.
 
           EXPECTED RESULT
-          Once the hook and gameplay camera are active, moving/rotating the right Touch controller moves/rotates the actual MW2 first-person weapon viewmodel. Switching campaign weapons should remain VR-driven and automatically learn/reuse suitable root attachments.
-
-          IMPORTANT
-          This is a source-built mod helper for a legitimate copy of MW2. It does not contain or replace iw4sp.exe or any proprietary MW2 model assets. Runtime validation must still match your exact Steam executable; a mismatch fails closed and writes MW2VRViewmodelHook.log.
+          The canned MW2 two-handed FPS arms should disappear while the actual MW2 gun remains visible and follows the tracked right Touch controller in 6DoF. This phase intentionally produces a weapon-only VR viewmodel; independent tracked glove/arm IK is a separate next stage.
 
           Controls:
-          F5  = toggle physical viewmodel pose publishing
+          F5  = toggle physical viewmodel pose publishing / hand filtering
           F6  = flip rotational head/controller yaw fallback direction
           F7  = flip physical left/right 6DoF lean direction
           F8  = recenter headset/controller reference
@@ -137,19 +135,24 @@ jobs:
 
           Touch:
           Right aim/grip       = weapon pose source
-          Left grip + squeeze = two-hand support orientation
+          Left grip + squeeze = two-hand aiming stabilization (does not render the old canned left arm)
           Right trigger        = fire
           Left trigger         = ADS / shouldered blend
           Left stick           = movement
           X                    = reload
           A                    = jump
 
-          If the loader says validation failed, open MW2VRViewmodelHook.log. The hook intentionally does not guess when the executable layout is different.
+          Useful log lines:
+          [MW2VR][HANDS] WEAPON-ONLY FILTER INSTALLED
+          [MW2VR][HANDS] weapon-only VR filter active
+          [MW2VR][HANDS] model[...] '...' ... HIDDEN (stock FPS hand/arm)
+
+          If the gun still shows baked arms, send MW2VRViewmodelHook.log. It will show whether the inner DObj getter or the exact MW2 hand-model naming needs a signature/name adjustment for your Steam executable.
           "@ | Set-Content artifact\QUICKSTART.txt
 
-      - name: Upload MW2 Campaign VR Phase 3D build
+      - name: Upload MW2 Campaign VR Phase 3E build
         uses: actions/upload-artifact@v4
         with:
-          name: MW2-Campaign-VR-Phase3D-Final-AllViewmodels-Win64-Win32
+          name: MW2-Campaign-VR-Phase3E-WeaponOnly-Win64-Win32
           path: artifact
           if-no-files-found: error
