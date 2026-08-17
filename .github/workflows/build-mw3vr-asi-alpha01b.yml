@@ -1,0 +1,95 @@
+name: Build MW3VR ASI Alpha 0.1b
+
+on:
+  push:
+    branches:
+      - mw3vr-asi-alpha01b
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct source archive
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem "mw3vr_asi\source_part*.b64" | Sort-Object Name
+          if ($parts.Count -ne 3) { throw "Expected 3 source archive parts, found $($parts.Count)." }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ""
+          [IO.File]::WriteAllBytes("mw3vr_asi_source.zip", [Convert]::FromBase64String($b64))
+          $hash = (Get-FileHash "mw3vr_asi_source.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne "4385670a56ef20de84c632fe37f2d956414b3e2a1faa592cc81d6e19e2cb688e") {
+            throw "Source ZIP hash mismatch: $hash"
+          }
+          Expand-Archive -Path "mw3vr_asi_source.zip" -DestinationPath "." -Force
+
+      - name: Configure Win32 Release
+        shell: cmd
+        run: cmake -S MW3VR_ASI -B build-mw3vr-asi -A Win32
+
+      - name: Build MW3VR ASI
+        shell: cmd
+        run: cmake --build build-mw3vr-asi --config Release --target mw3vr
+
+      - name: Fetch Ultimate ASI Loader Win32 D3D9
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/Win32-latest/d3d9-Win32.zip" -OutFile "d3d9-Win32.zip"
+          Expand-Archive -Path "d3d9-Win32.zip" -DestinationPath "ual" -Force
+          $loader = Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1
+          if (-not $loader) { throw "Ultimate ASI Loader d3d9.dll was not found." }
+          Write-Host "Using ASI loader: $($loader.FullName)"
+
+      - name: Package build
+        shell: pwsh
+        run: |
+          $asi = Get-ChildItem "build-mw3vr-asi" -Recurse -File -Filter "MW3VR.asi" | Select-Object -First 1
+          if (-not $asi) { throw "MW3VR.asi was not found after build." }
+          $loader = Get-ChildItem "ual" -Recurse -File -Filter "d3d9.dll" | Select-Object -First 1
+          if (-not $loader) { throw "d3d9.dll loader was not found." }
+
+          New-Item -ItemType Directory -Force "artifact\plugins" | Out-Null
+          Copy-Item $loader.FullName "artifact\d3d9.dll"
+          Copy-Item $asi.FullName "artifact\plugins\MW3VR.asi"
+          Copy-Item "MW3VR_ASI\mw3vr.ini" "artifact\plugins\mw3vr.ini"
+          Copy-Item "MW3VR_ASI\README.md" "artifact\README.md"
+          Copy-Item "MW3VR_ASI\THIRD_PARTY_NOTICES.md" "artifact\THIRD_PARTY_NOTICES.md"
+
+          @"
+          MW3VR OpenXR Alpha 0.1b - ASI Loader Build
+
+          IMPORTANT: REMOVE the previous MW3VR custom d3d9.dll and root mw3vr.ini first.
+
+          Extract this package directly into the folder containing iw5sp.exe.
+
+          Expected layout:
+            iw5sp.exe
+            d3d9.dll              <- Ultimate ASI Loader (Win32)
+            plugins\MW3VR.asi     <- MW3VR plugin
+            plugins\mw3vr.ini    <- MW3VR config
+
+          Start Steam and your OpenXR runtime, then launch MW3 Single Player.
+
+          A successful early startup should create mw3vr.log beside iw5sp.exe with lines similar to:
+            ASI host: pid=... exe=...iw5sp.exe
+            ASI: patched iw5sp Direct3DCreate9 IAT ...
+            MW3VR ASI alpha 0.1b loaded. D3D9 IAT hook=1
+            ASI: Direct3DCreate9 intercepted ...
+
+          F8 recenters head orientation once OpenXR tracking is active.
+          Single-player only. Do not use this with multiplayer/anti-cheat clients.
+          "@ | Set-Content "artifact\QUICKSTART.txt"
+
+          Get-FileHash "artifact\d3d9.dll" -Algorithm SHA256 | Out-File "artifact\SHA256.txt"
+          Get-FileHash "artifact\plugins\MW3VR.asi" -Algorithm SHA256 | Out-File "artifact\SHA256.txt" -Append
+
+      - name: Upload compiled package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MW3VR-OpenXR-Alpha01b-ASI-Win32
+          path: artifact
+          if-no-files-found: error
