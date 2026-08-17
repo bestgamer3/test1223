@@ -1,0 +1,17 @@
+           bi.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+                 if (XrOk(xrBeginSession(m_session, &bi), "xrBeginSession")) {
+                     m_sessionRunning = true;
+-                    PublishStatus("SteamVR OpenXR session running", 2);
++                    PublishStatus("Meta/Oculus OpenXR session running", 2);
+                 }
+             } else if (m_sessionState == XR_SESSION_STATE_STOPPING && m_sessionRunning) {
+                 xrEndSession(m_session);
+@@ -867,7 +893,7 @@ bool OpenXrHost::RenderEye(uint32_t eye, uint32_t imageIndex, const XrView& view
+ bool OpenXrHost::Initialize()
+ {
+     m_logFrames = GetPrivateProfileIntW(L"Debug", L"HostLogFrames", 0, g_iniPath) != 0;
+-    PublishStatus("Starting SteamVR OpenXR host", 1);
++    PublishStatus("Starting Meta/Oculus OpenXR host", 1);
+     if (!InitInstance() || !InitDeviceAndSession() || !CreateSwapchains() || !CreateBlitter()) {
+         HostLog("OpenXR host initialization failed; cleaning up for retry.");
+         Shutdown();
